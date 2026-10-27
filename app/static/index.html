@@ -22,7 +22,13 @@
     <p>Help requests from every channel, turned into rescue tasks a coordinator can act on.</p>
   </div>
   <div class="controls" role="group" aria-label="Replay">
-    <button id="play" class="btn primary" aria-pressed="false">Play the first six hours</button>
+    <label class="speed">Model
+      <select id="model">
+        <option value="meta" selected>Muse Spark (Meta Model API)</option>
+        <option value="open">Muse Spark Open (open weights)</option>
+      </select>
+    </label>
+    <button id="play" class="btn primary" aria-pressed="false">Play the first hours</button>
     <label class="speed">Speed
       <select id="speed">
         <option value="1600">1×</option>
@@ -32,6 +38,7 @@
     </label>
     <button id="jump" class="btn">Show all</button>
     <span id="clock" class="clock" aria-live="polite">Hour 0:00, 0 of 0 reports</span>
+    <button id="call" class="btn">Take a live call</button>
     <button id="add" class="btn">Add your own report</button>
   </div>
 </header>
@@ -50,7 +57,8 @@
         <p class="lede">After the 6 February 2023 earthquakes, calls for help came in on every channel at once.
         The same building was reported dozens of times, addresses were misheard, and volunteers sorted it all by hand.</p>
         <p>Press play to watch the agent read each report, check the address against the official neighbourhood
-        list, and merge it into the right building. Select any report or task to see why.</p>
+        list and merge it into the right building. When something does not add up, it asks the person who
+        reported it, reads the answer and updates the task. Select any report or task to see why.</p>
       </div>
     </div>
   </section>

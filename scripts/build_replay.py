@@ -46,6 +46,7 @@ def main() -> None:
     ap.add_argument('--no-followups', action='store_true', help='replay without follow-up questions')
     a = ap.parse_args()
     be = Backend.meta() if a.backend == 'meta' else Backend.open()
+    sim = Backend.meta()
     msgs = [json.loads(l) for l in (ROOT / 'data/eval/messages.jsonl').read_text().splitlines()]
     by_msg = {m['id']: m for m in msgs}
     incidents = {i['id']: i for i in json.loads((ROOT / 'data/eval/incidents.json').read_text())}
@@ -62,7 +63,11 @@ def main() -> None:
         task = desk.task_for(desk.cluster(tid).ids[0])
         if not needs_followup(task):
             return
-        qs = draft(task, desk.items, be)
+        try:
+            qs = draft(task, desk.items, be)
+        except RuntimeError as e:  # a failed draft only means no question this time
+            print(f'  draft failed for {tid}: {e}', flush=True)
+            return
         if not qs:
             return
         desk.ask(tid, qs, minute)
@@ -73,8 +78,12 @@ def main() -> None:
     def answer(minute: int, q: dict) -> None:
         asked = desk.items[q['to_message']]
         inc = incidents.get(by_msg.get(q['to_message'], {}).get('truth', {}).get('incident') or '')
-        text = reply(q['text_tr'], asked, inc, be)
-        patch = interpret(q['text_tr'], asked, text, be)
+        try:
+            text = reply(q['text_tr'], asked, inc, sim)  # the simulated reporter is the same for every backend
+            patch = interpret(q['text_tr'], asked, text, be)
+        except RuntimeError as e:
+            print(f'  answer to {q["to_message"]} failed: {e}', flush=True)
+            return
         rid = f'R{next(nreply):02d}'
         item = answer_item(rid, minute, asked, q['text_tr'], text, patch)
         log = desk.answer(item)

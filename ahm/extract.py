@@ -64,12 +64,15 @@ Every filled field needs an evidence quote copied from the message."""
 
 
 def extract(text: str, *, image_paths: list[str] | None = None, backend: Backend | None = None,
-            channel: str = 'message') -> dict:
+            channel: str = 'message', effort: str = 'low') -> dict:
+    """effort: model reasoning effort; 'minimal' (about 3 s) is used for readings while a call is going on."""
     content: list[dict] | str = f'Channel: {channel}\n\nMessage:\n{text}'
     if image_paths:
         content = [{'type': 'text', 'text': content}] + [image_part(p) for p in image_paths]
+    if backend is not None and backend.name == 'open' and effort == 'minimal':
+        effort = 'low'  # the open model is fast already and may not know 'minimal'
     res = chat([{'role': 'system', 'content': SYSTEM}, {'role': 'user', 'content': content}],
-               backend=backend, schema=SCHEMA, schema_name='help_request')
+               backend=backend, schema=SCHEMA, schema_name='help_request', reasoning_effort=effort)
     rec = res['data']
     rec['_meta'] = {'model': res['model'], 'seconds': res['seconds'], 'usage': res['usage']}
     return rec

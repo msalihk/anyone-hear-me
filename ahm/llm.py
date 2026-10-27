@@ -8,8 +8,11 @@ Both speak the same request format, so the rest of the code only chooses a `Back
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import mimetypes
+import os
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass
@@ -55,6 +58,25 @@ def _log_usage(backend: 'Backend', out: dict) -> None:
             f.write(json.dumps(row) + '\n')
 
 
+def _cache_get(key: str) -> dict | None:
+    """Optional disk cache (set AHM_CACHE=path.sqlite) so rebuilding a recording does not pay twice."""
+    path = os.environ.get('AHM_CACHE')
+    if not path:
+        return None
+    with sqlite3.connect(path) as db:
+        db.execute('create table if not exists c (k text primary key, v text)')
+        row = db.execute('select v from c where k = ?', (key,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def _cache_put(key: str, value: dict) -> None:
+    path = os.environ.get('AHM_CACHE')
+    if path:
+        with sqlite3.connect(path) as db:
+            db.execute('create table if not exists c (k text primary key, v text)')
+            db.execute('insert or replace into c values (?, ?)', (key, json.dumps(value)))
+
+
 def image_part(path: str) -> dict:
     mime = mimetypes.guess_type(path)[0] or 'image/jpeg'
     data = base64.b64encode(open(path, 'rb').read()).decode()
@@ -77,6 +99,10 @@ def chat(messages: list[dict], *, backend: Backend | None = None, schema: dict |
     if schema:
         body['response_format'] = {'type': 'json_schema',
                                    'json_schema': {'name': schema_name, 'strict': True, 'schema': schema}}
+    key = hashlib.sha256(json.dumps([backend.base_url, body], sort_keys=True).encode()).hexdigest()
+    hit = _cache_get(key)
+    if hit:
+        return hit
     headers = {'Content-Type': 'application/json'}
     if backend.auth_header:
         headers['Authorization'] = backend.auth_header
@@ -94,10 +120,15 @@ def chat(messages: list[dict], *, backend: Backend | None = None, schema: dict |
             content = d['choices'][0]['message'].get('content') or ''
             out = {'usage': d.get('usage'), 'model': d.get('model', backend.model), 'seconds': round(time.time() - t0, 2)}
             _log_usage(backend, out)
+            if schema and not content.strip():
+                # the reasoning used up the budget before the answer: try again with more room
+                body['max_tokens'] = min(body['max_tokens'] * 2, 16000)
+                raise json.JSONDecodeError('empty reply', '', 0)
             if schema:
                 out['data'] = json.loads(content)
             else:
                 out['text'] = content
+            _cache_put(key, out)
             return out
         except (requests.RequestException, json.JSONDecodeError) as e:
             last_err = e

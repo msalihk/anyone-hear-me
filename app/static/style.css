@@ -197,3 +197,24 @@ mark { background: #ffd2bd; color: inherit; padding: 0 1px; border-radius: 2px; 
   .report.arrive, .mark.new { animation: none; }
 }
 .mark .bottom small { display: block; font-size: 11px; margin-top: 2px; color: var(--green); }
+
+/* follow-up questions and answers */
+.report.reply { margin-left: 14px; border-left-style: dotted; }
+.report .asked { margin: 3px 0 0; font-size: 13px; color: var(--navy); }
+.report .asked::before { content: 'Asked: '; font-weight: 600; }
+.settled { color: var(--green); }
+.linkish { font: inherit; color: var(--navy); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.reply-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.reply-row input { flex: 1 1 220px; font: 15px var(--body); padding: 7px 9px; border: 2px solid var(--ink); border-radius: 3px; }
+.questions .error { margin-left: 8px; }
+
+/* live call */
+.call-head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.call-head .big { margin: 0; }
+.call-head .btn { margin-left: auto; }
+.call-text { font-size: 20px; line-height: 1.4; min-height: 3.2em; }
+.call-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.call-grid h3 { font: 600 18px var(--cond); margin: 6px 0; }
+.ask-next { margin: 0; padding-left: 18px; }
+.ask-next li { margin: 4px 0; font-weight: 600; color: var(--navy); }
+@media (max-width: 720px) { .call-grid { grid-template-columns: 1fr; } }
