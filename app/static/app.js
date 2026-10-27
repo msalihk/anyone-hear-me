@@ -258,7 +258,12 @@ function conflictsHtml(t) {
 
 function questionsHtml(tid, qs) {
   return `<div><p><b>Questions drafted for the person who reported it</b></p>
-    ${qs.map((q) => `<div class="ask" lang="tr">${esc(q.question || q)}${q.why ? `<div class="why" lang="en">${esc(q.why)}</div>` : ''}</div>`).join('')}
+    ${qs.map((q) => {
+      const text = typeof q === 'string' ? q : (q.text_tr || q.question || '');
+      const why = typeof q === 'string' ? '' : (q.why_en || q.why || '');
+      const to = typeof q === 'string' ? '' : q.to_message;
+      return `<div class="ask"><span lang="tr">${esc(text)}</span>${why || to ? `<div class="why">${to ? `Reply to ${esc(to)}. ` : ''}${esc(why)}</div>` : ''}</div>`;
+    }).join('')}
     <div class="approve-row"><button class="btn" data-approve="${esc(tid)}">Approve questions</button>
     <span class="muted" id="approved-${esc(tid)}">A coordinator approves before anything is sent. This demo sends nothing.</span></div></div>`;
 }
