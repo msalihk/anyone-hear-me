@@ -93,7 +93,7 @@ def overlay(image_path: str, found: list[Found], out_path: str, label: str = 'AI
     for f in found:
         if f.confidence is None or f.confidence >= min_conf:
             counts[f.phrase] = counts.get(f.phrase, 0) + 1
-    y = 10
+    y = img.height - font.size - 12 - (len(counts) + (1 if label else 0)) * (font.size + 6)  # bottom left, clear of labels
     for phrase, n in counts.items():
         draw.text((10, y), f'{phrase}: {n}', fill=COLORS.get(phrase, (255, 255, 255)) + (255,), font=font,
                   stroke_width=2, stroke_fill=(0, 0, 0, 255))
@@ -101,7 +101,10 @@ def overlay(image_path: str, found: list[Found], out_path: str, label: str = 'AI
     if label:
         draw.text((10, img.height - font.size - 12), label, fill=(255, 255, 255, 230), font=font,
                   stroke_width=2, stroke_fill=(0, 0, 0, 255))
-    Image.alpha_composite(img, layer).convert('RGB').save(out_path, quality=90)
+    out = Image.alpha_composite(img, layer).convert('RGB')
+    if out.width > 1200:
+        out = out.resize((1200, round(out.height * 1200 / out.width)), Image.LANCZOS)
+    out.save(out_path, quality=85)
     return out_path
 
 

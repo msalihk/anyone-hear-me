@@ -105,6 +105,7 @@ def main() -> None:
         tid = desk.task_of(m['id'])
         maybe_ask(tid, m['minute'], log)
         steps.append({'id': m['id'], 'minute': m['minute'], 'channel': m['channel'], 'text': m['text'],
+                      **({'media': m['media']} if m.get('media') else {}),
                       'record': {k: item['record'][k] for k in KEEP if k in item['record']},
                       'seconds': item['record'].get('_meta', {}).get('seconds'),
                       'agent': log, 'task': desk.task_for(m['id'])})

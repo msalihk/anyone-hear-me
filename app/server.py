@@ -31,6 +31,7 @@ from ahm.answers import answer_item, interpret
 from ahm.asr import ASR_URL, handshake, to_pcm, transcribe_pcm
 from ahm.config import meta_api_key
 from ahm.extract import extract
+from ahm.dispatch import plan as dispatch_plan
 from ahm.followup import draft, needs_followup
 from ahm.llm import Backend
 from ahm.merge import Desk
@@ -41,6 +42,8 @@ REPLAYS = {b: json.loads((ROOT / f'data/demo/replay-{b}.json').read_text())
            for b in ('meta', 'open') if (ROOT / f'data/demo/replay-{b}.json').exists()}
 REPLAY = REPLAYS['meta']
 COORDS = json.loads((ROOT / 'data/coords.json').read_text())
+TEAMS = json.loads((ROOT / 'data/demo/teams.json').read_text())['teams']
+MEDIA_INFO = json.loads((ROOT / 'data/demo/media/media.json').read_text()) if (ROOT / 'data/demo/media/media.json').exists() else {}
 MEDIA = ROOT / 'data' / 'demo' / 'media'
 
 PER_SESSION = int(os.environ.get('AHM_LIVE_PER_SESSION', '12'))   # live requests per visitor per hour
@@ -58,13 +61,20 @@ ANSWER_KEYS = ('answer', 'reply_to', 'question', 'answered', 'settles')
 
 
 def _seed(replay: dict) -> Desk:
+    steps = [s for s in replay['steps'] if s.get('kind') != 'dispatch']
     items = {s['id']: {'id': s['id'], 'minute': s['minute'], 'channel': s['channel'], 'text': s['text'],
-                       'record': s['record'], **{k: s[k] for k in ANSWER_KEYS if k in s}} for s in replay['steps']}
-    not_requests = [s['id'] for s in replay['steps'] if any(a['step'] == 'not_request' for a in s['agent'])]
+                       'record': s['record'], **{k: s[k] for k in ANSWER_KEYS if k in s}} for s in steps}
+    not_requests = [s['id'] for s in steps if any(a['step'] == 'not_request' for a in s['agent'])]
     return Desk.from_tasks(items, replay['tasks'], replay['decisions'], not_requests)
 
 
 SEEDS = {b: _seed(r) for b, r in REPLAYS.items()}
+
+
+def _last_busy(replay: dict) -> dict:
+    """Which teams were on which task at the end of the recording."""
+    d = [s for s in replay['steps'] if s.get('kind') == 'dispatch']
+    return dict(d[-1]['busy']) if d else {}
 LAST_MINUTE = max(s['minute'] for r in REPLAYS.values() for s in r['steps'])
 
 
@@ -91,13 +101,14 @@ def session(request: Request, response: Response) -> dict:
     with _lock:
         if not sid or sid not in _sessions:
             sid = secrets.token_urlsafe(16)
-            _sessions[sid] = {'desk': None, 'calls': [], 'n': 0, 'mode': 'meta'}
+            _sessions[sid] = {'desk': None, 'calls': [], 'n': 0, 'mode': 'meta', 'busy': None}
             response.set_cookie('ahm', sid, httponly=True, samesite='lax', max_age=86400)
             while len(_sessions) > 300:
                 _sessions.popitem(last=False)
         _sessions.move_to_end(sid)
         s = _sessions[sid]
         if s['desk'] is None:
+            s['busy'] = _last_busy(REPLAYS[s['mode']])
             s['desk'] = copy.deepcopy(SEEDS[s['mode']])
             try:
                 s['desk'].backend = make_backend(s['mode'])
@@ -135,7 +146,7 @@ def replay(request: Request, response: Response, backend: str = 'meta') -> dict:
     r = REPLAYS.get(backend, REPLAY)
     return {'backend': r['backend'], 'model': r['model'], 'steps': r['steps'],
             'coords': COORDS['places'], 'coords_source': COORDS['source'], 'backends': backends(),
-            'recorded': sorted(REPLAYS)}
+            'recorded': sorted(REPLAYS), 'teams': TEAMS, 'media': MEDIA_INFO}
 
 
 class ModeIn(BaseModel):
@@ -421,6 +432,39 @@ async def call(ws: WebSocket, province: str = 'Kahramanmaraş') -> None:
         await ws.close()
     except Exception:  # noqa: BLE001
         pass
+
+
+@app.post('/api/dispatch')
+def dispatch(request: Request, response: Response) -> dict:
+    """Ask the agent which free team should go where, on this visitor's desk as it stands now."""
+    s = session(request, response)
+    if s['mode'] not in backends():
+        raise HTTPException(503, 'Live suggestions on this model are not available right now.')
+    spend(s)
+    desk: Desk = s['desk']
+    tasks = desk.tasks()
+    ids = {t['id'] for t in tasks}
+    busy = {team: tid for team, tid in (s['busy'] or {}).items() if tid in ids
+            and next(t for t in tasks if t['id'] == tid)['status'] != 'resolved'}
+    coords = {k: v for k, v in COORDS['places'].items() if v}
+    t0 = time.time()
+    p = dispatch_plan(tasks, TEAMS, busy, coords, LAST_MINUTE + s['n'], desk.backend)
+    return {'plan': p, 'busy': busy, 'minute': LAST_MINUTE + s['n'], 'seconds': round(time.time() - t0, 1)}
+
+
+class AssignIn(BaseModel):
+    team: str
+    task: str
+
+
+@app.post('/api/dispatch/approve')
+def dispatch_approve(body: AssignIn, request: Request, response: Response) -> dict:
+    """The coordinator approved one suggestion: the team counts as busy on that task."""
+    s = session(request, response)
+    if body.team not in {t['id'] for t in TEAMS} or not s['desk'].cluster(body.task):
+        raise HTTPException(400, 'Unknown team or task.')
+    s['busy'] = {**(s['busy'] or {}), body.team: body.task}
+    return {'ok': True, 'busy': s['busy']}
 
 
 @app.post('/api/reset')

@@ -218,3 +218,20 @@ mark { background: #ffd2bd; color: inherit; padding: 0 1px; border-radius: 2px; 
 .ask-next { margin: 0; padding-left: 18px; }
 .ask-next li { margin: 4px 0; font-weight: 600; color: var(--navy); }
 @media (max-width: 720px) { .call-grid { grid-template-columns: 1fr; } }
+
+/* teams */
+.teampin { font: 700 11px/16px var(--cond); color: #fff; background: var(--navy); border: 1.5px solid #fff; padding: 0 4px; border-radius: 2px; white-space: nowrap; text-align: center; opacity: .7; }
+.teampin.busy { opacity: 1; }
+.team-on { color: var(--navy); font-weight: 600; }
+.report.agentnote { border-left-color: var(--navy); background: #e3e8ee; }
+.assign { border-left: 4px solid var(--navy); background: #fff; padding: 6px 10px; margin: 8px 0; }
+.assign p { margin: 3px 0; }
+.btn.small { font-size: 14px; padding: 5px 9px; }
+.tasks-head { gap: 10px; flex-wrap: wrap; }
+
+/* photos */
+.report .thumb { display: block; width: 100%; max-height: 120px; object-fit: cover; margin-top: 6px; border: 1px solid var(--rule); }
+.photo { margin: 10px 0; }
+.photo img { width: 100%; max-width: 640px; display: block; border: 1px solid var(--rule); }
+.photo figcaption { font-size: 13.5px; margin-top: 4px; max-width: 640px; }
+[dir="auto"]:lang(ar) { font-size: 1.08em; }

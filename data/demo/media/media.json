@@ -1,0 +1,38 @@
+{
+ "P1": {
+  "image": "P1.jpg",
+  "overlay": "P1-sam.jpg",
+  "found": {
+   "collapsed building": 1,
+   "rubble pile": 1,
+   "person": 0
+  },
+  "synthetic": true,
+  "made_with": "Muse Image 1.0",
+  "checked_with": "SAM 3.1"
+ },
+ "P2": {
+  "image": "P2.jpg",
+  "overlay": "P2-sam.jpg",
+  "found": {
+   "collapsed building": 1,
+   "rubble pile": 1,
+   "person": 4
+  },
+  "synthetic": true,
+  "made_with": "Muse Image 1.0",
+  "checked_with": "SAM 3.1"
+ },
+ "P3": {
+  "image": "P3.jpg",
+  "overlay": "P3-sam.jpg",
+  "found": {
+   "collapsed building": 1,
+   "rubble pile": 1,
+   "person": 0
+  },
+  "synthetic": true,
+  "made_with": "Muse Image 1.0",
+  "checked_with": "SAM 3.1"
+ }
+}

@@ -63,7 +63,7 @@ def _cache_get(key: str) -> dict | None:
     path = os.environ.get('AHM_CACHE')
     if not path:
         return None
-    with sqlite3.connect(path) as db:
+    with sqlite3.connect(path, timeout=60) as db:
         db.execute('create table if not exists c (k text primary key, v text)')
         row = db.execute('select v from c where k = ?', (key,)).fetchone()
     return json.loads(row[0]) if row else None
@@ -72,7 +72,7 @@ def _cache_get(key: str) -> dict | None:
 def _cache_put(key: str, value: dict) -> None:
     path = os.environ.get('AHM_CACHE')
     if path:
-        with sqlite3.connect(path) as db:
+        with sqlite3.connect(path, timeout=60) as db:
             db.execute('create table if not exists c (k text primary key, v text)')
             db.execute('insert or replace into c values (?, ?)', (key, json.dumps(value)))
 

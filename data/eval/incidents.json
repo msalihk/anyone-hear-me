@@ -466,5 +466,20 @@
   "signs_of_life": "voices_heard",
   "outcome": "partial",
   "rescued": 4
+ },
+ {
+  "id": "I31",
+  "type": "rescue",
+  "province": "Hatay",
+  "district": "Antakya",
+  "neighbourhood": "Haraparası",
+  "street_no": null,
+  "street": "Kurtuluş Caddesi",
+  "building_no": "8",
+  "building_name": "Hilal Apartmanı",
+  "landmark": "eczanenin karşısı",
+  "people_trapped": 3,
+  "signs_of_life": "voices_heard",
+  "outcome": "open"
  }
 ]

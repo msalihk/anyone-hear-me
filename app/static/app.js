@@ -4,6 +4,8 @@
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const words = (s) => String(s ?? '').replace(/_/g, ' ');
+const isArabic = (t) => /[\u0600-\u06FF]/.test(t || '');
+const langOf = (t) => (isArabic(t) ? 'ar' : 'tr');
 const hhmm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
 const CHANNELS = { x: 'X', sms: 'SMS', whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', telegram: 'Telegram',
   form: 'Web form', 'voice note': 'Voice note', call: 'Phone call', email: 'Email' };
@@ -66,6 +68,9 @@ const state = {
   questions: new Map(), // tid -> drafted follow-up questions (live only)
   approved: new Set(),  // tids whose live questions the visitor approved
   backend: 'meta',      // which model's recording is on the desk
+  teams: [],            // fictional rescue teams
+  media: {},            // photo id -> {image, overlay, found}
+  busy: new Map(),      // team -> task it was sent to (approved suggestions)
   liveModels: ['meta'], // models that take live reports here
 };
 
@@ -93,6 +98,14 @@ function where(task) {
 
 function drawMap(fit) {
   layer.clearLayers();
+  for (const tm of state.teams) {
+    const b = state.coords[tm.base];
+    if (!b) continue;
+    const tid = state.busy.get(tm.id), t = tid && state.tasks.get(tid), w = t && where(t);
+    if (w) L.polyline([[b.lat, b.lon], [w.lat, w.lon]], { color: '#17324d', weight: 2, dashArray: '5 5' }).addTo(layer);
+    L.marker([b.lat, b.lon], { keyboard: false, title: `${tm.id}${tid ? ` on ${tid}` : ', free'}`,
+      icon: L.divIcon({ className: '', iconSize: [44, 18], html: `<div class="teampin${tid ? ' busy' : ''}">${esc(tm.id)}</div>` }) }).addTo(layer);
+  }
   const seen = new Map();
   const pts = [];
   for (const t of state.tasks.values()) {
@@ -132,10 +145,18 @@ function peopleText(t) {
   return r.length === 1 ? String(r[0]) : `${r[0]}–${r[r.length - 1]}`;
 }
 
+function teamOf(tid) {
+  for (const [team, t] of state.busy) if (t === tid) return team;
+  return null;
+}
+
 function putTask(t) {
   for (const mid of t.message_ids) {
     const prev = state.owner.get(mid);
-    if (prev && prev !== t.id) state.tasks.delete(prev);   // two tasks joined into one
+    if (prev && prev !== t.id) {   // two tasks joined into one: a team sent to either follows the merged task
+      state.tasks.delete(prev);
+      for (const [team, tid] of state.busy) if (tid === prev) state.busy.set(team, t.id);
+    }
     state.owner.set(mid, t.id);
   }
   state.tasks.set(t.id, t);
@@ -162,13 +183,22 @@ function drawTasks(fresh) {
         <span class="q right" aria-hidden="true">${hours}h</span>
         <span class="q bottom${conf ? ' conf' : ''}" aria-hidden="true">${esc(peopleText(t))}${t.people_rescued ? `<small> ${t.people_rescued} out</small>` : ''}</span>
       </button>
-      <div class="task-caption"><b>${esc(taskTitle(t))}</b><br>${esc(placeLine(t))}</div>
+      <div class="task-caption"><b>${esc(taskTitle(t))}</b><br>${esc(placeLine(t))}${teamOf(t.id) ? `<br><span class="team-on">${esc(teamOf(t.id))} sent</span>` : ''}</div>
     </li>`;
   }).join('');
 }
 
 // ---------- incoming feed ----------
 function feedItem(s, isNew) {
+  if (s.kind === 'dispatch') {
+    const li = document.createElement('li');
+    li.className = `report agentnote${isNew ? ' arrive' : ''}`;
+    li.dataset.step = s.id; li.tabIndex = 0;
+    const p = s.plan;
+    li.innerHTML = `<div class="meta"><span class="ch">Agent</span><span>hour ${hhmm(s.minute)}</span></div>
+      <p class="tr">Suggested ${p.assignments.length} team${p.assignments.length === 1 ? '' : 's'}${p.held_back.length ? `; ${p.held_back.length} task${p.held_back.length === 1 ? '' : 's'} held back until the place is confirmed` : ''}.</p>`;
+    return li;
+  }
   const r = s.record || {};
   const noise = !r.is_help_request;
   const u = r.status === 'resolved' ? 'closed' : r.urgency;
@@ -179,16 +209,18 @@ function feedItem(s, isNew) {
   li.setAttribute('aria-current', String(state.selected?.kind === 'step' && state.selected.id === s.id));
   if (s.answer) li.classList.add('reply');
   li.innerHTML = `<div class="meta"><span class="ch">${esc(channel(s.channel))}</span><span>hour ${hhmm(s.minute)}</span>
-      ${s.answer ? `<span>answer to ${esc(s.reply_to)}</span>` : ''}${s.simulated ? '<span>simulated</span>' : ''}
+      ${s.answer ? `<span>answer to ${esc(s.reply_to)}</span>` : ''}${isArabic(s.text) ? '<span>Arabic</span>' : ''}${s.media ? '<span>photo</span>' : ''}${s.simulated ? '<span>simulated</span>' : ''}
       ${noise && !s.answer ? '<span>not a help request</span>' : ''}${s.id.startsWith('L') ? '<span>yours</span>' : ''}</div>
     ${s.answer ? `<p class="asked" lang="tr">${esc(s.question)}</p>` : ''}
-    <p class="tr" lang="tr">${esc(s.text)}</p>
+    <p class="tr" lang="${langOf(s.text)}" dir="auto">${esc(s.text)}</p>
+    ${s.media && state.media[s.media] ? `<img class="thumb" src="/media/${esc(state.media[s.media].image)}" alt="Photo attached to the report (AI-generated, synthetic)" loading="lazy">` : ''}
     ${r.summary_en ? `<p class="en">${esc(r.summary_en)}</p>` : ''}`;
   return li;
 }
 
 // ---------- agent trace ----------
 function stepTrace(s) {
+  if (s.kind === 'dispatch') return dispatchTrace(s);
   if (s.answer) return answerTrace(s);
   const r = s.record || {};
   const parts = [];
@@ -198,9 +230,9 @@ function stepTrace(s) {
   // 1. heard or read
   parts.push(`<div class="step"><span class="n">${n()}</span><div>
     <h3>${s.channel === 'phone call' ? 'Took a phone call' : s.transcript ? 'Transcribed the voice note' : `Read a report sent on ${esc(channel(s.channel))}`} at hour ${hhmm(s.minute)}</h3>
-    <p class="quote" lang="tr">${highlight(s.text, quotes)}</p>
-    <p class="muted">${s.transcript ? 'Muse Voice Transcribe, live, biased toward local place names. ' : ''}Highlighted words are the
-    quotes the agent used as evidence${s.seconds ? `; ${s.seconds} seconds end to end` : ''}.</p></div></div>`);
+    <p class="quote" lang="${langOf(s.text)}" dir="auto">${highlight(s.text, quotes)}</p>
+    <p class="muted">${s.transcript ? 'Muse Voice Transcribe, live, biased toward local place names. ' : ''}${isArabic(s.text) ? 'Written in Arabic; the agent reads it directly and writes names in their official Turkish spelling. ' : ''}Highlighted words are the
+    quotes the agent used as evidence${s.seconds ? `; ${s.seconds} seconds end to end` : ''}.</p>${photoHtml(s.media)}</div></div>`);
 
   // 2. understood
   if (!r.is_help_request) {
@@ -246,6 +278,15 @@ function stepTrace(s) {
   else if (s.questions?.length && s.task) parts.push(`<div class="step"><span class="n">${n()}</span><div>
     <h3>Drafted questions to settle what is unclear</h3>${questionsHtml(s.task.id, s.questions)}</div></div>`);
   return parts.join('');
+}
+
+function photoHtml(id) {
+  const m = id && state.media[id];
+  if (!m) return '';
+  const found = Object.entries(m.found || {}).map(([k, v]) => `${v} ${k}${v === 1 ? '' : (k === 'person' ? '' : 's')}`.replace('person', v === 1 ? 'person' : 'people')).join(', ');
+  return `<figure class="photo"><img src="/media/${esc(m.overlay)}" alt="The attached photo with what SAM 3.1 found outlined (AI-generated image, synthetic)" loading="lazy">
+    <figcaption>Photo attached to the report. ${esc(m.checked_with || 'SAM 3.1')} found: ${esc(found || 'nothing')}. Muse Spark read the photo with the text.
+    <span class="muted">The image is AI-generated (${esc(m.made_with || 'Muse Image')}) for this fictional scenario.</span></figcaption></figure>`;
 }
 
 function mergeLines(agent) {
@@ -302,7 +343,7 @@ function answerTrace(s) {
     <p class="ask" lang="tr">${esc(s.question)}</p>
     ${asked ? `<p class="muted">Their report: <span lang="tr">${esc(asked.text)}</span></p>` : ''}</div></div>`);
   parts.push(`<div class="step"><span class="n">${n()}</span><div><h3>Read the answer at hour ${hhmm(s.minute)}</h3>
-    <p class="quote" lang="tr">${highlight(s.text, (r.evidence || []).map((e) => e.quote))}</p>
+    <p class="quote" lang="${langOf(s.text)}" dir="auto">${highlight(s.text, (r.evidence || []).map((e) => e.quote))}</p>
     ${s.simulated ? '<p class="muted">Simulated reporter: in the replay, Muse Spark plays the reporter and answers from the facts of the fictional incident.</p>' : ''}</div></div>`);
   const settles = s.settles || [];
   const ac = r.address_check || {};
@@ -325,6 +366,28 @@ function answerTrace(s) {
   else if (s.questions?.length && s.task) parts.push(`<div class="step"><span class="n">${n()}</span><div>
     <h3>Drafted questions to settle what is still unclear</h3>${questionsHtml(s.task.id, s.questions)}</div></div>`);
   return parts.join('');
+}
+
+function dispatchTrace(s) {
+  const p = s.plan, live = s.id.startsWith('L');
+  const tline = (tid) => { const t = state.tasks.get(tid); return t ? `${esc(tid)}: ${esc(taskTitle(t))}, ${esc(placeLine(t))}` : esc(tid); };
+  return `<div class="step"><span class="n">1</span><div><h3>Ranked the open buildings that need a team now</h3>
+      <p class="muted">${esc(modelName())} ranks by signs of life, people trapped and hours waited, and holds back any building
+      whose place is not settled. Code then pairs free teams with buildings to keep travel short.</p></div></div>
+    <div class="step"><span class="n">2</span><div><h3>Suggested which team goes where at hour ${hhmm(s.minute)}</h3>
+      ${p.assignments.length ? p.assignments.map((a) => {
+        const sent = state.busy.get(a.team) === a.task;
+        return `<div class="assign"><p><b>${esc(a.team)} → ${tline(a.task)}</b></p>
+          <p>${esc(a.reason)}</p><p class="muted">${esc(a.team_reason || '')}</p>
+          ${live ? (sent ? '<p class="settled">Approved: team sent.</p>'
+            : `<p><button class="btn" data-assign="${esc(a.team)}" data-atask="${esc(a.task)}">Approve: send ${esc(a.team)}</button></p>`) : ''}</div>`;
+      }).join('') : '<p>No free team, or no open building that needs one.</p>'}
+      ${live ? '' : '<p class="muted">In the replay, the coordinator approves every suggestion (simulated); a team stays busy until its building is cleared.</p>'}
+    </div></div>
+    ${p.held_back.length ? `<div class="step"><span class="n">3</span><div><h3>Held back until the place is confirmed</h3>
+      ${p.held_back.map((h) => `<p><b>${tline(h.task)}</b>: <span class="muted">${esc(h.reason)}</span></p>`).join('')}</div></div>` : ''}
+    ${(p.waiting || []).length ? `<div class="step"><span class="n">${p.held_back.length ? 4 : 3}</span><div><h3>Waiting for the next free team</h3>
+      <p>${p.waiting.map((t) => `<button class="linkish" data-open-task="${esc(t)}">${esc(t)}</button>`).join(', ')}</p></div></div>` : ''}`;
 }
 
 function conflictsHtml(t) {
@@ -386,10 +449,13 @@ function taskTrace(t) {
         ${a ? `Answer: <span lang="tr">“${esc(a.text)}”</span> <button class="linkish" data-open-step="${esc(a.id)}">${esc(a.id)}</button>` : 'Waiting for an answer.'}</div></div>`;
     }).join('')}` : ''}
     ${(t.open_questions || []).length ? `<p><b>Still unknown</b></p><ul class="options">${t.open_questions.slice(0, 5).map((q) => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
+    ${reports.filter((s) => s.media).map((s) => photoHtml(s.media)).join('')}
+    <p><button class="btn small" data-cap="${esc(t.id)}">Export as CAP alert</button>
+      <span class="muted">Common Alerting Protocol 1.2, the format emergency systems exchange.</span></p>
     <p><b>Every report behind this task</b></p>
     ${reports.map((s) => `<div class="step plain"><div>
       <p class="muted">${esc(channel(s.channel))}, hour ${hhmm(s.minute)}${s.answer ? `, answer to ${esc(s.reply_to)}` : ''}</p>
-      <p class="quote" lang="tr">${highlight(s.text, ev.get(s.id) || (s.record?.evidence || []).map((e) => e.quote))}</p>
+      <p class="quote" lang="${langOf(s.text)}" dir="auto">${highlight(s.text, ev.get(s.id) || (s.record?.evidence || []).map((e) => e.quote))}</p>
       <p><button class="btn" data-open-step="${esc(s.id)}">${s.answer ? 'What it settled' : 'Why it was joined'}</button></p></div></div>`).join('')}
   </div>`;
 }
@@ -424,6 +490,7 @@ function select(kind, id, { pause = true } = {}) {
 function apply(s, isNew) {
   state.byId.set(s.id, s);
   $('#feed').append(feedItem(s, isNew));
+  if (s.kind === 'dispatch' && !s.id.startsWith('L')) state.busy = new Map(Object.entries(s.busy || {}));
   if (s.task) putTask(s.task);
   if (s.answer && s.task) { state.questions.delete(s.task.id); state.approved.delete(s.task.id); }
   if (s.questions?.length && s.task) state.questions.set(s.task.id, s.questions);
@@ -464,7 +531,7 @@ function stop() {
 }
 function reset() {
   state.shown = 0; state.live = []; state.tasks.clear(); state.owner.clear(); state.byId.clear(); state.questions.clear();
-  state.approved.clear();
+  state.approved.clear(); state.busy.clear();
   $('#feed').innerHTML = '';
   drawTasks(); drawMap(false);
 }
@@ -713,6 +780,88 @@ function cleanupCall() {
   try { ws?.close(); } catch { /* already closed */ }
 }
 
+async function suggestTeams(btn) {
+  stop();
+  jumpToEnd();
+  btn.disabled = true; btn.textContent = 'Ranking buildings…';
+  try {
+    const d = await post('/api/dispatch', {});
+    const n = state.live.filter((x) => x.kind === 'dispatch').length + 1;
+    showLive({ id: `LD${n}`, kind: 'dispatch', minute: d.minute, channel: 'agent', plan: d.plan, busy: d.busy, agent: [], task: null });
+  } catch (e) {
+    $('#trace').innerHTML = `<div class="empty"><p class="error">${esc(e.message)}</p></div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Suggest teams now';
+  }
+}
+
+async function approveAssign(btn) {
+  btn.disabled = true;
+  try {
+    await post('/api/dispatch/approve', { team: btn.dataset.assign, task: btn.dataset.atask });
+    state.busy.set(btn.dataset.assign, btn.dataset.atask);
+    drawTasks(); drawMap(false); showTrace();
+  } catch (e) {
+    btn.disabled = false;
+    btn.insertAdjacentHTML('afterend', `<span class="error"> ${esc(e.message)}</span>`);
+  }
+}
+
+// ---------- CAP export ----------
+// One CAP 1.2 alert per task, with status "Exercise": the scenario is fictional.
+function capXml(t) {
+  const x = (v) => esc(String(v ?? ''));
+  const now = new Date().toISOString().replace(/\.\d+Z$/, '+00:00');
+  const w = where(t);
+  const trapped = t.people_reported?.length ? t.people_reported.join(' or ') : 'unknown';
+  const settled = ['confirmed', 'confirmed_by_reporter', 'settled_by_cross_reports'].includes(t.place_status);
+  const desc = [t.summary, `Reports: ${t.reports} (${(t.channels || []).join(', ')}).`, `People reported trapped: ${trapped}.`,
+    t.people_rescued ? `Rescued: ${t.people_rescued}.` : '', ...(t.conflicts || []).map((c) => (c.settled
+      ? `Settled by reporter: ${c.field} = ${c.settled}.` : `Unsettled: ${c.field}.`))].filter(Boolean).join(' ');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>anyone-hear-me-demo-${x(t.id)}-${Date.now()}</identifier>
+  <sender>demo@anyone-hear-me.invalid</sender>
+  <sent>${now}</sent>
+  <status>Exercise</status>
+  <msgType>Alert</msgType>
+  <scope>Restricted</scope>
+  <restriction>Search and rescue coordination. Fictional demo data.</restriction>
+  <note>Generated by the Anyone Hear Me demo from fictional reports. Not a real emergency.</note>
+  <info>
+    <language>en</language>
+    <category>Rescue</category>
+    <event>Collapsed building, people trapped</event>
+    <responseType>Assess</responseType>
+    <urgency>${t.status === 'resolved' ? 'Past' : 'Immediate'}</urgency>
+    <severity>${t.signs_of_life === 'voices_heard' || t.signs_of_life === 'contact_by_phone' ? 'Extreme' : 'Severe'}</severity>
+    <certainty>${t.reports > 1 && settled ? 'Observed' : 'Likely'}</certainty>
+    <senderName>Anyone Hear Me (demo)</senderName>
+    <headline>${x(`${t.id}: ${taskTitle(t)}, ${placeLine(t)}`)}</headline>
+    <description>${x(desc)}</description>
+    <instruction>Coordinator approval required before dispatch.</instruction>
+    <parameter><valueName>peopleTrapped</valueName><value>${x(trapped)}</value></parameter>
+    <parameter><valueName>signsOfLife</valueName><value>${x(t.signs_of_life)}</value></parameter>
+    <parameter><valueName>placeStatus</valueName><value>${x(t.place_status)}</value></parameter>
+    <area>
+      <areaDesc>${x([taskTitle(t), (t.building || {}).street, (t.building || {}).building_no && `No ${t.building.building_no}`, placeLine(t)].filter(Boolean).join(', '))}</areaDesc>
+      ${w ? `<circle>${w.lat.toFixed(5)},${w.lon.toFixed(5)} ${w.approx ? '3' : '0.5'}</circle>` : ''}
+    </area>
+  </info>
+</alert>
+`;
+}
+
+function downloadCap(tid) {
+  const t = state.tasks.get(tid);
+  if (!t) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([capXml(t)], { type: 'application/xml' }));
+  a.download = `${tid}-cap-alert.xml`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 // ---------- wiring ----------
 function wire() {
   $('#play').onclick = () => (state.timer ? stop() : play());
@@ -721,6 +870,7 @@ function wire() {
   $('#model').onchange = (e) => switchModel(e.target.value);
   $('#add').onclick = () => { showError(''); composer.showModal(); };
   $('#call').onclick = takeCall;
+  $('#suggest').onclick = (e) => suggestTeams(e.currentTarget);
   $('#send').onclick = send;
   $('#rec').onclick = startRecording;
   $('#audio-file').onchange = (e) => {
@@ -738,6 +888,8 @@ function wire() {
     const s = e.target.closest('[data-open-step]'); if (s) return select('step', s.dataset.openStep);
     const a = e.target.closest('[data-approve]'); if (a) return approve(a);
     const r = e.target.closest('[data-reply]'); if (r) return sendReply(r);
+    const g = e.target.closest('[data-assign]'); if (g) return approveAssign(g);
+    const cap = e.target.closest('[data-cap]'); if (cap) return downloadCap(cap.dataset.cap);
   });
   $('#trace').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.matches('.reply-row input')) { e.preventDefault(); sendReply(e.target.nextElementSibling); }
@@ -752,10 +904,13 @@ async function load(backend) {
   state.backend = d.backend;
   state.liveModels = d.backends || ['meta'];
   state.coords = Object.fromEntries(Object.entries(d.coords).filter(([, v]) => v));
+  state.teams = d.teams || [];
+  state.media = d.media || {};
   for (const o of $('#model').options) o.disabled = !(d.recorded || ['meta']).includes(o.value);
   const live = state.liveModels.includes(state.backend);
   $('#add').disabled = !live;
   $('#call').disabled = !live;
+  $('#suggest').disabled = !live;
   $('#add').title = live ? '' : 'Live reports on this model are not available right now';
 }
 

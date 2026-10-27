@@ -1,0 +1,12 @@
+{
+ "note": "Fictional search-and-rescue teams for the demo. Names, sizes and equipment are invented.",
+ "teams": [
+  {"id": "SAR-1", "base": "Kahramanmaraş|Dulkadiroğlu", "people": 12, "equipment": ["acoustic listening device", "hydraulic cutter"]},
+  {"id": "SAR-2", "base": "Kahramanmaraş|Onikişubat", "people": 8, "equipment": ["search dog", "thermal camera"]},
+  {"id": "SAR-3", "base": "Hatay|Antakya", "people": 15, "equipment": ["acoustic listening device", "light crane", "hydraulic cutter"]},
+  {"id": "SAR-4", "base": "Hatay|Defne", "people": 10, "equipment": ["search dog", "hydraulic cutter"]},
+  {"id": "SAR-5", "base": "Hatay|İskenderun", "people": 9, "equipment": ["thermal camera", "hydraulic cutter"]},
+  {"id": "SAR-6", "base": "Malatya|Battalgazi", "people": 11, "equipment": ["acoustic listening device", "search dog"]},
+  {"id": "SAR-7", "base": "Adıyaman|Merkez", "people": 7, "equipment": ["thermal camera", "hydraulic cutter"]}
+ ]
+}

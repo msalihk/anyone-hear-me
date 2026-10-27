@@ -60,7 +60,11 @@ Write numbers as digits ("on iki" -> "12", "üçüncü sokak" -> "3. Sokak").
 Urgency: critical = people trapped with signs of life; high = people trapped, no signs reported, or \
 injured people waiting; medium = urgent supplies (water, shelter, heating) for a group; low = general needs.
 You do not give medical advice and you do not assess injuries beyond what the sender said.
-Every filled field needs an evidence quote copied from the message."""
+Every filled field needs an evidence quote copied from the message.
+Some messages are in Arabic (many Arabic speakers live in Hatay) or Kurdish: write place, street and \
+building names in their official Turkish spelling (حي هانجاغز -> Hancağız, أرغوان كونوتلاري -> Erguvan \
+Konutları), keep the evidence quotes in the original language, and write the summary in English.
+building_name is the building's own name only ("Gül Sitesi"), without the neighbourhood."""
 
 
 def extract(text: str, *, image_paths: list[str] | None = None, backend: Backend | None = None,
