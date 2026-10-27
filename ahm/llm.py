@@ -10,8 +10,10 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import requests
 
@@ -36,6 +38,21 @@ class Backend:
             raise RuntimeError('BASETEN_API_KEY is not set and no self-hosted base_url was given.')
         return cls('open', base_url or config.BASETEN_BASE, model or config.OPEN_MODEL,
                    f'Api-Key {key}' if key else '')
+
+
+USAGE_LOG = Path(__file__).resolve().parent.parent / 'out' / 'usage.jsonl'
+_lock = threading.Lock()
+
+
+def _log_usage(backend: 'Backend', out: dict) -> None:
+    """Append token counts per call, so spend can be estimated while the provider's usage page lags."""
+    u = out.get('usage') or {}
+    row = {'t': round(time.time()), 'backend': backend.name, 'model': out['model'],
+           'in': u.get('prompt_tokens', 0), 'out': u.get('completion_tokens', 0), 's': out['seconds']}
+    with _lock:
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(USAGE_LOG, 'a') as f:
+            f.write(json.dumps(row) + '\n')
 
 
 def image_part(path: str) -> dict:
@@ -76,6 +93,7 @@ def chat(messages: list[dict], *, backend: Backend | None = None, schema: dict |
             d = r.json()
             content = d['choices'][0]['message'].get('content') or ''
             out = {'usage': d.get('usage'), 'model': d.get('model', backend.model), 'seconds': round(time.time() - t0, 2)}
+            _log_usage(backend, out)
             if schema:
                 out['data'] = json.loads(content)
             else:
