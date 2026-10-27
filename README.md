@@ -59,6 +59,21 @@ python scripts/voice_to_record.py note.m4a --province Kahramanmaraş
   [turkey-neighbourhoods](https://github.com/muratgozel/turkey-neighbourhoods) 4.0.3 (MIT, see
   `data/LICENSE.turkey-neighbourhoods`).
 
+## Related work (what existed, and what this adds)
+
+- **2023 volunteer work** (Açık Yazılım Ağı, Deprem Yapay Zeka on Hugging Face): OCR on screenshots,
+  a Turkish NER model for addresses (deprem-ner), intent classifiers and satellite damage models, all fed
+  into the afetharita map. Text and images only; repeated reports were not merged at run time.
+  https://github.com/huggingface/blog/blob/main/using-ml-for-disasters.md · https://huggingface.co/deprem-ml
+- **Research**: detecting help calls in earthquake tweets (arXiv 2302.13403) and classifying actionable
+  requests with LLMs (arXiv 2504.16144). Neither merges duplicate reports, checks addresses or handles
+  voice.
+
+What this project adds: Turkish **voice notes**, **address checking against the official neighbourhood
+list** (correct, flag or ask), **merging reports about the same building across channels with
+conflicts shown**, a **human-approved task queue**, and an **open-weight offline mode**, measured on a
+labelled, fictional evaluation set.
+
 ## Background
 
 - Euronews (10 Feb 2023): how Twitter helped find people under the rubble, and how the platform block
