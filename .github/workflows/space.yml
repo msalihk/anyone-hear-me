@@ -33,5 +33,5 @@ jobs:
           from huggingface_hub import HfApi
           HfApi(token=os.environ['HF_TOKEN']).upload_folder(
               repo_id='Salihkk/anyone-hear-me', repo_type='space', folder_path='stage',
-              commit_message=f"Deploy {os.environ['GITHUB_SHA'][:7]}", delete_patterns=['*'])
+              commit_message=f"Deploy {os.environ['GITHUB_SHA'][:7]}", delete_patterns=['ahm/**', 'app/**', 'data/**'])
           PY
