@@ -75,6 +75,7 @@ class Cluster:
     street_nos: set[tuple[str, str]] = field(default_factory=set)
     reasons: list[str] = field(default_factory=list)
     tid: str | None = None  # stable task id once shown to a coordinator
+    asked: list[dict] = field(default_factory=list)  # follow-up questions sent for this task, and answers
 
 
 def _street_no(loc: dict) -> tuple[str, str] | None:
@@ -288,8 +289,15 @@ def build_task(tid: str, c: Cluster, by_id: dict, decisions: list[dict]) -> dict
     # place: a resolved address wins; otherwise the places every report allows
     resolved = Counter((r['address_check']['province']['value'], r['address_check']['district']['value'],
                         r['address_check']['neighbourhood']['value']) for r in recs if r['address_check']['ok'])
+    answers = [it for it in items if it.get('answer') and it.get('answered')]
+    told_place = [it for it in answers if 'place' in it['settles'] and it['record']['address_check']['ok']]
     place, place_status, options = None, 'unknown', []
-    if resolved:
+    if told_place:  # the reporter answered where it is: that settles the place
+        ac = told_place[-1]['record']['address_check']
+        place = (ac['province']['value'], ac['district']['value'], ac['neighbourhood']['value'])
+        place_status = 'confirmed_by_reporter'
+        options = [' / '.join(p) for p in resolved] if len(resolved) > 1 else []
+    elif resolved:
         place, _ = resolved.most_common(1)[0]
         place_status = 'confirmed' if len(resolved) == 1 else 'conflicting'
         options = [' / '.join(p) for p in resolved]
@@ -308,6 +316,7 @@ def build_task(tid: str, c: Cluster, by_id: dict, decisions: list[dict]) -> dict
 
     counts = [(r['people_trapped'], it['id']) for r, it in zip(recs, items) if r['people_trapped']]
     distinct = sorted({n for n, _ in counts})
+    told_count = [it for it in answers if it['record']['people_trapped'] is not None]
     rescued = max([r.get('people_rescued') or 0 for r in recs] + [0])
     latest = recs[-1]
     if latest['status'] == 'resolved':
@@ -323,8 +332,15 @@ def build_task(tid: str, c: Cluster, by_id: dict, decisions: list[dict]) -> dict
     conflicts = []
     if len(distinct) > 1:
         conflicts.append({'field': 'people_trapped', 'values': {str(n): [m for k, m in counts if k == n] for n in distinct}})
+        if told_count:
+            conflicts[-1].update(settled=str(told_count[-1]['record']['people_trapped']), by=told_count[-1]['id'])
+    if told_count:
+        distinct = [told_count[-1]['record']['people_trapped']]
     if place_status in ('conflicting', 'ambiguous'):
         conflicts.append({'field': 'place', 'values': options})
+    elif place_status == 'confirmed_by_reporter' and (options or len(c.places or ()) > 1):
+        conflicts.append({'field': 'place', 'values': options or [' / '.join(p) for p in sorted(c.places)][:8],
+                          'settled': ' / '.join(x for x in place if x), 'by': told_place[-1]['id']})
     missing = sorted({q for r in recs for q in r.get('missing_info', [])})[:6]
     maybe = [d for d in decisions if d['verdict'] == 'unsure' and (set(d['a']) & set(c.ids) or set(d['b']) & set(c.ids))]
     return {
@@ -338,6 +354,7 @@ def build_task(tid: str, c: Cluster, by_id: dict, decisions: list[dict]) -> dict
         'conflicts': conflicts, 'open_questions': missing,
         'possible_duplicates': [sorted(set(d['a'] + d['b']) - set(c.ids)) for d in maybe],
         'summary': latest['summary_en'], 'merge_reasons': sorted(set(c.reasons)),
+        'followups': c.asked,
         'evidence': [{'message': it['id'], 'quote': e['quote'], 'field': e['field']}
                      for it in items for e in it['record'].get('evidence', [])
                      if e['field'] in ('people_trapped', 'signs_of_life', 'status', 'location.building_name')][:12],
@@ -378,7 +395,8 @@ def single(item: dict) -> Cluster:
 def _join(a: Cluster, b: Cluster, reason: str) -> Cluster:
     tids = sorted(t for t in (a.tid, b.tid) if t)
     return Cluster(a.ids + b.ids, _intersect(a.places, b.places), a.buildings | b.buildings,
-                   a.street_nos | b.street_nos, a.reasons + b.reasons + [reason], tids[0] if tids else None)
+                   a.street_nos | b.street_nos, a.reasons + b.reasons + [reason], tids[0] if tids else None,
+                   a.asked + b.asked)
 
 
 class Desk:
@@ -403,33 +421,8 @@ class Desk:
             self.not_requests.append(item['id'])
             return [{'step': 'not_request', 'reason': rec.get('summary_en', '')}]
         new = single(item)
-        log: list[dict] = []
-        # rules: same resolved neighbourhood and same building identity
-        for i, c in enumerate(self.clusters):
-            exact = new.places is not None and c.places is not None and len(new.places) == 1 \
-                and new.places == c.places and '*' not in next(iter(new.places))
-            if exact and (same_name(new.buildings, c.buildings) or new.street_nos & c.street_nos):
-                self.clusters[i] = _join(c, new, 'same neighbourhood and building')
-                return [{'step': 'rule', 'task': c.tid, 'reason': 'same neighbourhood and building'}]
-        # agent: ask about every compatible group
-        pbn = name_places(self.clusters + [new])
-        cands = [i for i, c in enumerate(self.clusters) if is_candidate(new, c, pbn)]
-        same = []
-        for i in cands:
-            v = judge(new, self.clusters[i], self.items, self.backend)
-            self.decisions.append({'a': new.ids, 'b': list(self.clusters[i].ids), **v})
-            log.append({'step': 'agent', 'task': self.clusters[i].tid, **v})
-            if v['verdict'] == 'same':
-                same.append(i)
-        if same:
-            joined_tids = [self.clusters[k].tid for k in same]
-            target = same[0]
-            merged = _join(self.clusters[target], new, 'agent: same building')
-            for k in same[1:]:  # the new report links two groups: they are one building
-                merged = _join(merged, self.clusters[k], 'agent: linked through a new report')
-            self.clusters = [c for k, c in enumerate(self.clusters) if k not in same] + [merged]
-            if len(same) > 1:
-                log.append({'step': 'linked', 'task': merged.tid, 'tasks': joined_tids})
+        log, joined = self._match(new)
+        if joined:
             return log
         new.tid = f'T{self._next:02d}'
         self._next += 1
@@ -441,6 +434,98 @@ class Desk:
                 log.append({'step': 'possible', 'reason': m['reason']})
                 break
         return log
+
+    def _match(self, new: Cluster) -> tuple[list[dict], bool]:
+        """Join `new` to the groups that are the same building (rules first, then the agent).
+
+        `new` is not in self.clusters. Returns the log and whether it was joined to something.
+        """
+        log: list[dict] = []
+        # rules: same resolved neighbourhood and same building identity
+        for i, c in enumerate(self.clusters):
+            exact = new.places is not None and c.places is not None and len(new.places) == 1 \
+                and new.places == c.places and '*' not in next(iter(new.places))
+            if exact and (same_name(new.buildings, c.buildings) or new.street_nos & c.street_nos):
+                self.clusters[i] = _join(c, new, 'same neighbourhood and building')
+                log.append({'step': 'rule', 'task': c.tid, 'reason': 'same neighbourhood and building'})
+                if new.tid:
+                    log[-1]['from'] = new.tid
+                return log, True
+        # agent: ask about every compatible group
+        pbn = name_places(self.clusters + [new])
+        cands = [i for i, c in enumerate(self.clusters) if is_candidate(new, c, pbn)]
+        same = []
+        for i in cands:
+            v = judge(new, self.clusters[i], self.items, self.backend)
+            self.decisions.append({'a': list(new.ids), 'b': list(self.clusters[i].ids), **v})
+            log.append({'step': 'agent', 'task': self.clusters[i].tid, **v})
+            if new.tid:
+                log[-1]['from'] = new.tid
+            if v['verdict'] == 'same':
+                same.append(i)
+        if not same:
+            return log, False
+        joined_tids = [self.clusters[k].tid for k in same]
+        merged = _join(self.clusters[same[0]], new, 'agent: same building')
+        for k in same[1:]:  # the new report links two groups: they are one building
+            merged = _join(merged, self.clusters[k], 'agent: linked through a new report')
+        self.clusters = [c for k, c in enumerate(self.clusters) if k not in same] + [merged]
+        if len(same) > 1:
+            log.append({'step': 'linked', 'task': merged.tid, 'tasks': joined_tids})
+        return log, True
+
+    # --- follow-up questions and answers ---------------------------------------------------------------
+
+    def cluster(self, tid: str) -> Cluster | None:
+        return next((c for c in self.clusters if c.tid == tid), None)
+
+    def ask(self, tid: str, questions: list[dict], minute: int | None = None) -> None:
+        """Record follow-up questions a coordinator approved for a task."""
+        c = self.cluster(tid)
+        for q in questions:
+            c.asked.append({'to': q['to_message'], 'question': q['text_tr'], 'why': q.get('why_en', ''),
+                            'minute': minute, 'answer': None})
+
+    def waiting(self, tid: str) -> bool:
+        c = self.cluster(tid)
+        return bool(c and any(q['answer'] is None for q in c.asked))
+
+    def rounds(self, tid: str) -> int:
+        c = self.cluster(tid)
+        return len({q['minute'] for q in c.asked}) if c else 0
+
+    def answer(self, item: dict) -> list[dict]:
+        """A reporter answered a follow-up: update their task, then see whether it now matches another task.
+
+        `item` comes from answers.answer_item(). Returns the log, like add().
+        """
+        self.items[item['id']] = item
+        c = next(c for c in self.clusters if item['reply_to'] in c.ids)
+        for q in c.asked:
+            if q['to'] == item['reply_to'] and q['answer'] is None and q['question'] == item['question']:
+                q['answer'] = item['id']
+        c.ids.append(item['id'])
+        rec = item['record']
+        if 'place' in item['settles'] and rec['address_check']['ok']:
+            c.places = places_of(rec)  # the reporter said where it is: that replaces the guesses
+        elif places_of(rec) is not None:
+            c.places = _intersect(c.places, places_of(rec))
+        bk = building_key(rec['location'])
+        if bk and 'building' in item['settles']:
+            c.buildings.add(bk)
+        sn = _street_no(rec['location'])
+        if sn and 'building' in item['settles']:
+            c.street_nos.add(sn)
+        log = [{'step': 'answer', 'task': c.tid, 'settles': item['settles'], 'answered': item['answered'],
+                'reason': rec.get('summary_en', '')}]
+        if not item['settles']:
+            return log
+        # with a clearer address or building, it may now be the same building as another task
+        self.clusters.remove(c)
+        more, joined = self._match(c)
+        if not joined:
+            self.clusters.append(c)
+        return log + more
 
     @classmethod
     def from_tasks(cls, items: dict[str, dict], tasks: list[dict], decisions: list[dict],
@@ -457,6 +542,10 @@ class Desk:
                 c = _join(c, o, 'recorded')
             c.reasons = t.get('merge_reasons', [])
             c.tid = t['id']
+            c.asked = [dict(q) for q in t.get('followups') or []]
+            if t.get('place_status') == 'confirmed_by_reporter' and t.get('place'):
+                p = t['place']
+                c.places = {(fold(p['province']), fold(p['district']), fold(p['neighbourhood']))}
             d.clusters.append(c)
         d._next = 1 + max((int(t['id'][1:]) for t in tasks), default=0)
         return d

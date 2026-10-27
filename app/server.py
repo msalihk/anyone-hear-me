@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ahm.addresses import keywords_for, resolve
+from ahm.answers import answer_item, interpret
 from ahm.asr import to_pcm, transcribe_pcm
 from ahm.extract import extract
 from ahm.followup import draft, needs_followup
@@ -47,8 +48,9 @@ if MEDIA.exists():
 
 # --- seed desk ------------------------------------------------------------------------------------------
 
+ANSWER_KEYS = ('answer', 'reply_to', 'question', 'answered', 'settles')
 _items = {s['id']: {'id': s['id'], 'minute': s['minute'], 'channel': s['channel'], 'text': s['text'],
-                    'record': s['record']} for s in REPLAY['steps']}
+                    'record': s['record'], **{k: s[k] for k in ANSWER_KEYS if k in s}} for s in REPLAY['steps']}
 _not_requests = [s['id'] for s in REPLAY['steps'] if any(a['step'] == 'not_request' for a in s['agent'])]
 SEED = Desk.from_tasks(_items, REPLAY['tasks'], REPLAY['decisions'], _not_requests)
 LAST_MINUTE = max(s['minute'] for s in REPLAY['steps'])
@@ -113,6 +115,19 @@ class TextIn(BaseModel):
     channel: str = 'form'
 
 
+def _questions(desk: Desk, tid: str | None) -> list[dict]:
+    """Draft follow-up questions when the task has something to settle and nobody is being asked yet."""
+    if not tid or desk.waiting(tid) or desk.rounds(tid) >= 2:
+        return []
+    task = desk.task_for(desk.cluster(tid).ids[0])
+    if not needs_followup(task):
+        return []
+    try:
+        return draft(task, desk.items)
+    except Exception:  # noqa: BLE001 - drafts are a help, not a requirement
+        return []
+
+
 def _add(s: dict, text: str, channel: str, extra: dict | None = None) -> dict:
     desk: Desk = s['desk']
     s['n'] += 1
@@ -123,16 +138,66 @@ def _add(s: dict, text: str, channel: str, extra: dict | None = None) -> dict:
     item = {'id': mid, 'minute': LAST_MINUTE + s['n'], 'channel': channel, 'text': text, 'record': rec,
             **(extra or {})}
     log = desk.add(item)
-    task = desk.task_for(mid)
-    questions = []
-    if task and needs_followup(task):
-        try:
-            questions = draft(task, desk.items)
-        except Exception:  # noqa: BLE001 - drafts are a help, not a requirement
-            questions = []
+    tid = desk.task_of(mid)
+    questions = _questions(desk, tid)
     return {'id': mid, 'minute': item['minute'], 'channel': channel, 'text': text, 'record': rec,
-            'seconds': round(time.time() - t0, 1), 'agent': log, 'task': task, 'questions': questions,
-            **(extra or {})}
+            'seconds': round(time.time() - t0, 1), 'agent': log, 'task': desk.task_for(mid),
+            'questions': questions, **(extra or {})}
+
+
+class Approve(BaseModel):
+    task: str
+    questions: list[dict]
+
+
+@app.post('/api/live/approve')
+def live_approve(body: Approve, request: Request, response: Response) -> dict:
+    """The coordinator approved the drafted questions: from now on the task waits for the answers."""
+    s = session(request, response)
+    desk: Desk = s['desk']
+    c = desk.cluster(body.task)
+    if not c:
+        raise HTTPException(404, 'This task is no longer on the desk. Reload the page to start again.')
+    qs = [q for q in body.questions[:2] if q.get('to_message') in c.ids and q.get('text_tr')]
+    if not qs:
+        raise HTTPException(400, 'There are no questions to approve for this task.')
+    desk.ask(body.task, [{'to_message': q['to_message'], 'text_tr': str(q['text_tr'])[:400],
+                          'why_en': str(q.get('why_en', ''))[:300]} for q in qs], LAST_MINUTE + s['n'])
+    return {'ok': True, 'task': desk.task_for(c.ids[0])}
+
+
+class ReplyIn(BaseModel):
+    to_message: str
+    question: str
+    text: str
+
+
+@app.post('/api/live/reply')
+def live_reply(body: ReplyIn, request: Request, response: Response) -> dict:
+    """The visitor answers a follow-up question as the reporter; the agent reads it and updates the task."""
+    text = body.text.strip()
+    if not 1 <= len(text) <= 600:
+        raise HTTPException(400, 'Write the answer in 1 to 600 characters.')
+    s = session(request, response)
+    desk: Desk = s['desk']
+    asked = desk.items.get(body.to_message)
+    tid = desk.task_of(body.to_message)
+    c = desk.cluster(tid) if tid else None
+    if not asked or not c or not any(q['to'] == body.to_message and q['question'] == body.question
+                                     and q['answer'] is None for q in c.asked):
+        raise HTTPException(400, 'This question was not sent, or it was already answered.')
+    spend(s)
+    t0 = time.time()
+    s['n'] += 1
+    rid = f'L{s["n"]:02d}'
+    patch = interpret(body.question, asked, text)
+    item = answer_item(rid, LAST_MINUTE + s['n'], asked, body.question, text, patch)
+    log = desk.answer(item)
+    new_tid = desk.task_of(rid)
+    return {'id': rid, 'minute': item['minute'], 'channel': item['channel'], 'text': text,
+            'record': item['record'], 'answer': True, 'reply_to': body.to_message, 'question': body.question,
+            'answered': item['answered'], 'settles': item['settles'], 'seconds': round(time.time() - t0, 1),
+            'agent': log, 'task': desk.task_for(rid), 'questions': _questions(desk, new_tid)}
 
 
 @app.post('/api/live/message')
