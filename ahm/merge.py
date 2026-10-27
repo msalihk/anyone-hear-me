@@ -317,6 +317,11 @@ def build_task(tid: str, c: Cluster, by_id: dict, decisions: list[dict]) -> dict
     counts = [(r['people_trapped'], it['id']) for r, it in zip(recs, items) if r['people_trapped']]
     distinct = sorted({n for n, _ in counts})
     told_count = [it for it in answers if it['record']['people_trapped'] is not None]
+    if told_count:  # a later report with another count reopens the question
+        last = told_count[-1]
+        if any(not it.get('answer') and r['people_trapped'] and r['people_trapped'] != last['record']['people_trapped']
+               and (it.get('minute') or 0) > (last.get('minute') or 0) for r, it in zip(recs, items)):
+            told_count = []
     rescued = max([r.get('people_rescued') or 0 for r in recs] + [0])
     latest = recs[-1]
     if latest['status'] == 'resolved':
