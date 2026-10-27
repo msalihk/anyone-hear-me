@@ -85,6 +85,8 @@ def resolve(loc: dict) -> dict:
     """
     gz = gazetteer()
     given_p, given_d, given_n = loc.get('province'), loc.get('district'), loc.get('neighbourhood')
+    if not given_n and not given_d and loc.get('raw'):
+        given_n = name_in_text(loc['raw'], given_p, loc.get('building_name'))
     prov = _best(given_p, list(gz))
     provs = [prov.value] if prov.value else list(gz)
 
@@ -137,6 +139,20 @@ def resolve(loc: dict) -> dict:
     if not dist.value and dist.status != 'missing' and nb.value:
         out['district'] = Match(given_d, out['district'].value, 'not_found', dist.score)
     return _summary(out)
+
+
+def name_in_text(raw: str, province: str | None = None, building: str | None = None) -> str | None:
+    """Longest official neighbourhood name written in the text (5+ letters), for when the model left the
+    field empty: "Merkez Beydağı Şafak Apartmanı yıkıldı" -> "Merkez Beydağı"."""
+    gz = gazetteer()
+    t = raw.replace('I', 'ı').replace('İ', 'i').lower()
+    if building:  # a building called "Güneş Apartmanı" is not the neighbourhood Güneş
+        t = t.replace(building.replace('I', 'ı').replace('İ', 'i').lower(), ' ')
+    t = re.sub(r"\b[\wçğıöşü]+\s+(apartman\w*|apt\w*|site\w*|konut\w*|blok\w*)", ' ', t)
+    text = fold(t)
+    provs = [province] if province in gz else list(gz)
+    hits = {m for p in provs for ms in gz[p].values() for m in ms if len(fold(m)) >= 5 and fold(m) in text}
+    return max(hits, key=lambda m: len(fold(m))) if hits else None
 
 
 def _summary(out: dict) -> dict:

@@ -81,6 +81,8 @@ def make_incidents(n: int, rng: random.Random) -> list[dict]:
         no = rng.randint(1, 120)
         if twin:
             street = incidents[-1]['street_no']  # same street, different building: must not be merged
+            while str(no) == incidents[-1]['building_no']:
+                no = rng.randint(1, 120)
         supply = rng.random() < 0.2
         inc = {
             'id': f'I{len(incidents) + 1:02d}', 'type': 'supply' if supply else 'rescue',
