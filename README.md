@@ -34,8 +34,9 @@ self-hosted when cloud services or platforms are unavailable.
 |---|---|
 | Muse Voice Transcribe | Turkish voice notes to text (realtime API, place-name keyword bias) |
 | Muse Spark | Structured extraction with evidence, image understanding, merge/verify agent |
-| SAM 3.1 | *(planned)* marking damaged structures in photos |
-| Muse Spark Open | *(planned)* offline mode on self-hostable open weights |
+| SAM 3.1 | Marks collapsed buildings, rubble and people in photos attached to requests |
+| Muse Image | Generates the clearly labelled synthetic photos used in demos (no real disaster photos of real people) |
+| Muse Spark Open | Offline mode on self-hostable open weights (tested on Baseten) |
 
 ## Setup
 
