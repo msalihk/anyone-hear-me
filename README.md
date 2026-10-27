@@ -86,6 +86,40 @@ made with `scripts/build_replay.py` and `scripts/build_dispatch.py`; nothing in 
 the replay, the coordinator's approvals and the reporters' answers are simulated: Muse Spark plays each
 reporter and answers only from the facts of the fictional incident (`ahm/simulate.py`).
 
+## How well it works
+
+Measured on the fictional scenario in `data/eval` (31 incidents, 129 messages, 113 of them help
+requests), with the agent's own recorded runs. These are numbers on invented data written to be hard
+(misspellings, numbers in words, names that exist in several towns, Arabic), not a field trial.
+
+**Reading single reports** (`python scripts/evaluate.py`):
+
+| | Muse Spark | Muse Spark Open |
+|---|---|---|
+| Help requests recognised | 113/113 | 113/113 |
+| Address resolved correctly | 66/89 (74%) | 52/89 (58%) |
+| Address flagged with the right options | 19/89 (21%) | 18/89 (20%) |
+| Address wrong | 1/89 (1%) | 4/89 (4%) |
+| People count as stated | 36/37 (97%) | 34/37 (92%) |
+| "Some rescued, others still inside" read correctly | 6/6 | 1/6 |
+
+**Asking back** (`python scripts/eval_followups.py`): the same reports on the same desk, without and with
+the follow-up loop (Muse Spark; answers from the simulated reporter):
+
+| | Without | With follow-ups |
+|---|---|---|
+| Tasks (31 real incidents) | 43 | 37 |
+| Incidents located correctly | 28/31 | 30/31 |
+| Rescue incidents with the right people count | 10/25 | 23/25 |
+| Rescue incidents with the right status | 19/25 | 21/25 |
+| Open tasks with an unsettled issue | 19 | 3 |
+| Merge precision (no wrong merges = 1.0) | 1.0 | 1.0 |
+| Merge recall (duplicates found) | 0.80 | 0.92 |
+
+59 questions were asked; 46 answers settled something. With follow-ups, Muse Spark Open reaches 22/25 right
+counts and 2 unsettled tasks, but makes one wrong merge (precision 0.97) and leaves more duplicates
+(recall 0.84, 44 tasks).
+
 ## Data
 
 - `data/gazetteer.json`: districts and neighbourhoods of the 11 provinces affected on 6 Feb 2023, from

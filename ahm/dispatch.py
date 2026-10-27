@@ -38,8 +38,9 @@ Urgency, in order: people trapped with signs of life (voices, phone contact); th
 signs reported; the longer since the first report, the more urgent; more people still trapped, more \
 urgent. A task whose place is not settled (ambiguous, unknown or conflicting) goes in held_back with what \
 must be confirmed first, never in priorities. Supply-only tasks (water, shelter) do not need a rescue \
-team: leave them out. Every reason names the facts it rests on (signs of life, people, hours). Use only \
-the ids given."""
+team: leave them out. Every reason names the facts it rests on, in plain English for a coordinator \
+("voices heard, 5 people trapped, waiting 1 h 40 min"), never field names like voices_heard. Use only the \
+ids given."""
 
 
 def km(a: dict, b: dict) -> float:
@@ -75,8 +76,8 @@ def plan(tasks: list[dict], teams: list[dict], busy: dict[str, str], coords: dic
         lines.append(f'- {t["id"]}: place {" / ".join((t.get("place") or {}).values()) or "?"} '
                      f'(place {"settled" if settled else t["place_status"]}); building {b.get("building_name") or ""} '
                      f'{b.get("street") or ""} {b.get("building_no") or ""}; people trapped {t["people_reported"] or "?"}; '
-                     f'rescued {t["people_rescued"] or 0}; signs of life {t["signs_of_life"]}; needs {t["needs"]}; '
-                     f'first report {round((now - (t["first_minute"] or now)) / 60, 1)} h ago; '
+                     f'rescued {t["people_rescued"] or 0}; signs of life {t["signs_of_life"].replace("_", " ")}; needs {t["needs"]}; '
+                     f'first report {(now - (t["first_minute"] or now)) // 60} h {(now - (t["first_minute"] or now)) % 60} min ago; '
                      f'unsettled: {[c["field"] for c in t["conflicts"] if "settled" not in c] or "none"}; road distance: {dists}')
     team_lines = [f'- {tm["id"]}: base {tm["base"].replace("|", " / ")}, {tm["people"]} people, {", ".join(tm["equipment"])}'
                   for tm in free]

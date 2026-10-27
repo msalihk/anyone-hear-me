@@ -68,6 +68,8 @@ def settled_fields(patch: dict) -> list[str]:
         out.append('people_trapped')
     if patch['people_rescued'] is not None or patch['status'] == 'resolved':
         out.append('status')
+    if patch['signs_of_life'] != 'unknown':
+        out.append('signs_of_life')
     return out
 
 

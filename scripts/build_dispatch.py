@@ -1,8 +1,9 @@
 """Add the agent's team suggestions to a recorded replay, at a few moments of the scenario.
 
 At each moment the desk is rebuilt from the replay (the tasks as they stood then), the agent proposes
-which free team goes where (ahm/dispatch.py), and the coordinator's approval is simulated: suggested teams
-count as busy until their task is cleared. The suggestions are stored as steps of kind "dispatch".
+which free team goes where (ahm/dispatch.py), and the coordinator's approval is simulated: a suggested
+team counts as busy until its task is cleared or, also simulated, until it reports back after SHIFT
+minutes on site. The suggestions are stored as steps of kind "dispatch".
 
 usage: python scripts/build_dispatch.py [--backend meta] [--at 60 150 240 330]
 """
@@ -19,6 +20,8 @@ sys.path.insert(0, str(ROOT))
 
 from ahm.dispatch import plan  # noqa: E402
 from ahm.llm import Backend  # noqa: E402
+
+SHIFT = 180  # simulated: a team reports back and is free again after three hours on a building
 
 
 def tasks_at(steps: list[dict], minute: int) -> list[dict]:
@@ -49,6 +52,7 @@ def main() -> None:
     coords = {k: v for k, v in json.loads((ROOT / 'data/coords.json').read_text())['places'].items() if v}
     be = Backend.meta() if a.backend == 'meta' else Backend.open()
     busy: dict[str, str] = {}
+    since: dict[str, int] = {}
     plans = []
     for n, minute in enumerate(a.at, 1):
         tasks = tasks_at(steps, minute)
@@ -60,11 +64,12 @@ def main() -> None:
                 first = next((s['task']['message_ids'][0] for s in steps if s.get('task') and s['task']['id'] == tid), None)
                 tid = owner.get(first)
                 busy[team] = tid
-            if not tid or by_id[tid]['status'] == 'resolved':
+            if not tid or by_id[tid]['status'] == 'resolved' or minute - since[team] >= SHIFT:
                 busy.pop(team)
         p = plan(tasks, teams, dict(busy), coords, minute, be)
         for x in p['assignments']:
             busy[x['team']] = x['task']
+            since[x['team']] = minute
         step = {'id': f'D{n}', 'kind': 'dispatch', 'minute': minute, 'channel': 'agent',
                 'text': f'{len(p["assignments"])} team suggestions, {len(p["held_back"])} tasks held back',
                 'record': {}, 'agent': [], 'task': None, 'plan': p, 'busy': dict(busy), 'simulated': True}

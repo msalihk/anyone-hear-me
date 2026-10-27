@@ -43,7 +43,8 @@ def score(replay: dict, incidents: dict, msgs: dict) -> dict:
         mids = [m for m in ids if truth[m] == iid and m in pred]
         if not mids:
             continue
-        tid = max({pred[m] for m in mids}, key=lambda x: sum(pred[m] == x for m in mids))
+        # the task holding most of the incident's reports; ties go to the earliest task, so runs agree
+        tid = max(sorted({pred[m] for m in mids}), key=lambda x: sum(pred[m] == x for m in mids))
         t = by_id[tid]
         p = t.get('place') or {}
         if p and all(fold(p.get(k) or '') == fold(inc[k]) for k in ('province', 'district', 'neighbourhood')):
@@ -83,7 +84,7 @@ def main() -> None:
         return
     w, f = out['without'], out['with']
     n = w['incidents']
-    rows = [('Tasks (30 incidents)', w['tasks'], f['tasks']),
+    rows = [(f'Tasks ({n} incidents)', w['tasks'], f['tasks']),
             ('Incidents located correctly', f'{w["located"]}/{n}', f'{f["located"]}/{n}'),
             ('Rescue incidents with the right count', f'{w["count_right"]}/{w["count_n"]}', f'{f["count_right"]}/{f["count_n"]}'),
             ('Rescue incidents with the right status', f'{w["status_right"]}/{w["status_n"]}', f'{f["status_right"]}/{f["status_n"]}'),

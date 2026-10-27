@@ -28,7 +28,8 @@ const PLACE_STATUS = {
   ambiguous: 'Place unclear',
   unknown: 'No place yet',
 };
-const SETTLES = { place: 'where it is', building: 'which building', people_trapped: 'how many people are trapped', status: 'who is out' };
+const SETTLES = { place: 'where it is', building: 'which building', people_trapped: 'how many people are trapped', status: 'who is out',
+  signs_of_life: 'whether there are signs of life' };
 const STATUS = { open: 'Open', partly_rescued: 'Some people rescued', resolved: 'Everyone reported rescued' };
 
 // mark evidence quotes inside the original text, without trusting either string as HTML
@@ -249,7 +250,7 @@ function stepTrace(s) {
       <dt>Signs of life</dt><dd>${esc(words(r.signs_of_life))}</dd>
       ${r.needs?.length ? `<dt>Needs</dt><dd>${esc(r.needs.map(words).join(', '))}</dd>` : ''}
       <dt>Urgency</dt><dd>${esc(r.status === 'resolved' ? 'closed, everyone reported out' : r.urgency)}${r.urgency_reason ? `: ${esc(r.urgency_reason)}` : ''}</dd>
-      ${r.missing_info?.length ? `<dt>Missing</dt><dd>${esc(r.missing_info.join('; '))}</dd>` : ''}
+      ${(r.missing_info || []).filter((m) => !NO_PERSONAL.test(m)).length ? `<dt>Missing</dt><dd>${esc(r.missing_info.filter((m) => !NO_PERSONAL.test(m)).join('; '))}</dd>` : ''}
     </dl></div></div>`);
 
   // 3. address
@@ -345,7 +346,8 @@ function answerTrace(s) {
   parts.push(`<div class="step"><span class="n">${n()}</span><div><h3>Read the answer at hour ${hhmm(s.minute)}</h3>
     <p class="quote" lang="${langOf(s.text)}" dir="auto">${highlight(s.text, (r.evidence || []).map((e) => e.quote))}</p>
     ${s.simulated ? '<p class="muted">Simulated reporter: in the replay, Muse Spark plays the reporter and answers from the facts of the fictional incident.</p>' : ''}</div></div>`);
-  const settles = s.settles || [];
+  const settles = [...(s.settles || [])];
+  if (s.answered && !settles.length && r.signs_of_life && r.signs_of_life !== 'unknown') settles.push('signs_of_life');
   const ac = r.address_check || {};
   const loc = r.location || {};
   const place = ['neighbourhood', 'district', 'province'].map((k) => ac[k]?.value).filter(Boolean).join(', ');
@@ -356,6 +358,7 @@ function answerTrace(s) {
       ${settles.includes('place') ? `<dt>Place</dt><dd>${esc(place || 'not matched')} <span class="muted">${ac.ok ? 'checked against the official list' : 'not in the official list'}</span></dd>` : ''}
       ${settles.includes('building') ? `<dt>Building</dt><dd>${esc([loc.street, loc.building_no && `No ${loc.building_no}`, loc.building_name].filter(Boolean).join(', '))}</dd>` : ''}
       ${settles.includes('people_trapped') ? `<dt>People</dt><dd>${esc(r.people_trapped)} trapped</dd>` : ''}
+      ${settles.includes('signs_of_life') ? `<dt>Signs of life</dt><dd>${esc(words(r.signs_of_life))}</dd>` : ''}
       ${settles.includes('status') ? `<dt>Status</dt><dd>${esc(r.status === 'resolved' ? 'everyone out' : `${r.people_rescued || 0} rescued`)}</dd>` : ''}
     </dl>` : '<p class="muted">The task stays open to other reports and answers.</p>'}</div></div>`);
   const merges = (s.agent || []).filter((a) => ['rule', 'agent', 'linked'].includes(a.step));
@@ -382,7 +385,7 @@ function dispatchTrace(s) {
           ${live ? (sent ? '<p class="settled">Approved: team sent.</p>'
             : `<p><button class="btn" data-assign="${esc(a.team)}" data-atask="${esc(a.task)}">Approve: send ${esc(a.team)}</button></p>`) : ''}</div>`;
       }).join('') : '<p>No free team, or no open building that needs one.</p>'}
-      ${live ? '' : '<p class="muted">In the replay, the coordinator approves every suggestion (simulated); a team stays busy until its building is cleared.</p>'}
+      ${live ? '' : '<p class="muted">In the replay, the coordinator approves every suggestion and a team reports back after three hours on a building (both simulated); then it can be sent again.</p>'}
     </div></div>
     ${p.held_back.length ? `<div class="step"><span class="n">3</span><div><h3>Held back until the place is confirmed</h3>
       ${p.held_back.map((h) => `<p><b>${tline(h.task)}</b>: <span class="muted">${esc(h.reason)}</span></p>`).join('')}</div></div>` : ''}
@@ -421,6 +424,20 @@ function questionsHtml(tid, qs) {
   </div>`;
 }
 
+// what still needs settling, the same rules the agent uses to decide whether to ask
+function stillOpen(t) {
+  if (t.status === 'resolved') return [];
+  const out = (t.conflicts || []).filter((c) => !c.settled).map((c) => (c.field === 'people_trapped'
+    ? 'How many people are trapped: reports disagree' : 'Where it is: reports disagree on the place'));
+  if (['ambiguous', 'unknown'].includes(t.place_status) && !out.some((x) => x.startsWith('Where'))) out.push('Where it is: the place is not settled');
+  const b = t.building || {};
+  if (!b.building_no && !b.building_name) out.push('Which building: no name or number yet');
+  if (!t.people_reported?.length) out.push('How many people are inside');
+  return out;
+}
+
+const NO_PERSONAL = /phone|telefon|contact number|name of|isim/i;
+
 function taskTrace(t) {
   const reports = t.message_ids.map((id) => state.byId.get(id)).filter(Boolean);
   const ev = new Map();
@@ -448,7 +465,7 @@ function taskTrace(t) {
       return `<div class="ask"><span lang="tr">${esc(f.question)}</span><div class="why">To ${esc(f.to)}.
         ${a ? `Answer: <span lang="tr">“${esc(a.text)}”</span> <button class="linkish" data-open-step="${esc(a.id)}">${esc(a.id)}</button>` : 'Waiting for an answer.'}</div></div>`;
     }).join('')}` : ''}
-    ${(t.open_questions || []).length ? `<p><b>Still unknown</b></p><ul class="options">${t.open_questions.slice(0, 5).map((q) => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
+    ${stillOpen(t).length ? `<p><b>Still open</b></p><ul class="options">${stillOpen(t).map((q) => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
     ${reports.filter((s) => s.media).map((s) => photoHtml(s.media)).join('')}
     <p><button class="btn small" data-cap="${esc(t.id)}">Export as CAP alert</button>
       <span class="muted">Common Alerting Protocol 1.2, the format emergency systems exchange.</span></p>
