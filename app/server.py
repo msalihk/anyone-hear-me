@@ -71,10 +71,18 @@ def _seed(replay: dict) -> Desk:
 SEEDS = {b: _seed(r) for b, r in REPLAYS.items()}
 
 
+SHIFT = 180  # as in the recording: a team reports back after three hours on a building (simulated)
+
+
 def _last_busy(replay: dict) -> dict:
-    """Which teams were on which task at the end of the recording."""
-    d = [s for s in replay['steps'] if s.get('kind') == 'dispatch']
-    return dict(d[-1]['busy']) if d else {}
+    """Which teams are still on a building when a visitor takes over the desk, after the recording."""
+    end = max(s['minute'] for s in replay['steps'])
+    sent = {}
+    for s in replay['steps']:
+        if s.get('kind') == 'dispatch':
+            for a in s['plan']['assignments']:
+                sent[a['team']] = (a['task'], s['minute'])
+    return {team: tid for team, (tid, m) in sent.items() if end - m < SHIFT}
 LAST_MINUTE = max(s['minute'] for r in REPLAYS.values() for s in r['steps'])
 
 

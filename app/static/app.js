@@ -197,7 +197,7 @@ function feedItem(s, isNew) {
     li.dataset.step = s.id; li.tabIndex = 0;
     const p = s.plan;
     li.innerHTML = `<div class="meta"><span class="ch">Agent</span><span>hour ${hhmm(s.minute)}</span></div>
-      <p class="tr">Suggested ${p.assignments.length} team${p.assignments.length === 1 ? '' : 's'}${p.held_back.length ? `; ${p.held_back.length} task${p.held_back.length === 1 ? '' : 's'} held back until the place is confirmed` : ''}.</p>`;
+      <p class="tr">${p.assignments.length ? `Suggested ${p.assignments.length} team${p.assignments.length === 1 ? '' : 's'}` : 'No free team right now'}${p.held_back.length ? `; ${p.held_back.length} task${p.held_back.length === 1 ? '' : 's'} held back until the place is confirmed` : ''}.</p>`;
     return li;
   }
   const r = s.record || {};
@@ -507,7 +507,7 @@ function select(kind, id, { pause = true } = {}) {
 function apply(s, isNew) {
   state.byId.set(s.id, s);
   $('#feed').append(feedItem(s, isNew));
-  if (s.kind === 'dispatch' && !s.id.startsWith('L')) state.busy = new Map(Object.entries(s.busy || {}));
+  if (s.kind === 'dispatch') state.busy = new Map(Object.entries(s.busy || {}));   // teams on a building at that moment
   if (s.task) putTask(s.task);
   if (s.answer && s.task) { state.questions.delete(s.task.id); state.approved.delete(s.task.id); }
   if (s.questions?.length && s.task) state.questions.set(s.task.id, s.questions);
