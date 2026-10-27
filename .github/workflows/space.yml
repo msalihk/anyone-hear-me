@@ -1,0 +1,37 @@
+# Mirrors the demo to the Hugging Face Space on every push to main.
+# Needs one repository secret: HF_TOKEN (a Hugging Face token with write access to the Space).
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'msalihk/anyone-hear-me' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Stage the Space
+        run: |
+          mkdir stage
+          cp -r ahm app data LICENSE stage/
+          grep -v '^pytest' requirements.txt > stage/requirements.txt
+          cp space/app.py space/README.md space/packages.txt stage/
+          find stage -name '__pycache__' -prune -exec rm -rf {} +
+      - name: Upload
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install -q huggingface_hub
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          HfApi(token=os.environ['HF_TOKEN']).upload_folder(
+              repo_id='Salihkk/anyone-hear-me', repo_type='space', folder_path='stage',
+              commit_message=f"Deploy {os.environ['GITHUB_SHA'][:7]}", delete_patterns=['*'])
+          PY
