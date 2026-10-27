@@ -29,7 +29,7 @@ def test_short_province_name():
 def test_close_names_are_flagged_not_guessed():
     r = resolve({'province': 'Kahramanmaraş', 'district': 'Dulkadiroğlu', 'neighbourhood': 'Şeyh Halil'})
     assert r['neighbourhood']['status'] == 'ambiguous' and not r['ok']
-    assert 'Şeyh Adil' in r['neighbourhood']['alternatives']
+    assert any(a.startswith('Şeyh Adil') for a in r['neighbourhood']['alternatives'])
 
 
 def test_missing_district_found_from_unique_neighbourhood_or_flagged():

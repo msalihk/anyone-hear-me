@@ -14,7 +14,7 @@ NEEDS = ['search_and_rescue', 'heavy_machinery', 'medical_team', 'water', 'food'
 SCHEMA = {
     'type': 'object',
     'additionalProperties': False,
-    'required': ['is_help_request', 'status', 'location', 'people_trapped', 'signs_of_life', 'needs',
+    'required': ['is_help_request', 'status', 'location', 'people_trapped', 'people_rescued', 'signs_of_life', 'needs',
                  'urgency', 'urgency_reason', 'evidence', 'missing_info', 'summary_en'],
     'properties': {
         'is_help_request': {'type': 'boolean', 'description': 'false for news, prayers, rumours or unrelated text'},
@@ -35,6 +35,8 @@ SCHEMA = {
                 'raw': {'type': 'string', 'description': 'the location words exactly as written'},
             }},
         'people_trapped': {'type': ['integer', 'null'], 'description': 'number of people reported under rubble'},
+        'people_rescued': {'type': ['integer', 'null'],
+                           'description': 'number reported rescued in this message (updates), else null'},
         'signs_of_life': {'type': 'string', 'enum': ['voices_heard', 'contact_by_phone', 'none_reported', 'unknown']},
         'needs': {'type': 'array', 'items': {'type': 'string', 'enum': NEEDS}},
         'urgency': {'type': 'string', 'enum': ['critical', 'high', 'medium', 'low']},

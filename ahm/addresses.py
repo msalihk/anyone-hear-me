@@ -25,7 +25,8 @@ MARGIN = 6    # points the best candidate must lead the second by to be a correc
 def fold(s: str) -> str:
     """Turkish-aware lowercase, drop suffix words and spaces: 'Şeyh Adil Mahallesi' -> 'şeyhadil'."""
     s = s.replace('I', 'ı').replace('İ', 'i').lower()
-    s = re.sub(r'\b(mahallesi|mahalle|mah|mh|ilçesi|ilçe|merkez)\b\.?', ' ', s)
+    s = re.sub(r'\b(mahallesi|mahalle|mah|mh|ilçesi)\b\.?', ' ', s)
+    s = re.sub(r'(\S)\s+köyü?\s*$', r'\1', s.strip())  # "Uzunköy Köyü" -> "Uzunköy"
     return re.sub(r'[^\wçğıöşü]', '', s)
 
 
@@ -43,23 +44,29 @@ class Match:
     alternatives: list[str] = field(default_factory=list)
 
 
-def _best(given: str | None, choices: list[str]) -> Match:
+def _best(given: str | None, choices: list[str], strict: bool = False) -> Match:
+    """strict: the search space is the whole region (no province or district to anchor it), where a
+    near-miss is as likely to be another town's neighbourhood as a typo, so fuzzy corrections need a
+    much higher score and a clear lead; otherwise the options are shown."""
     if not given:
         return Match(given, None, 'missing')
     folded = {fold(c): c for c in choices}
     g = fold(given)
     if g in folded:
         return Match(given, folded[g], 'exact', 100.0)
-    hits = process.extract(g, list(folded), scorer=fuzz.WRatio, limit=3)
+    hits = process.extract(g, list(folded), scorer=fuzz.ratio, limit=3)
     if not hits:
         return Match(given, None, 'not_found')
     (k1, s1, _), rest = hits[0], hits[1:]
     s2 = rest[0][1] if rest else 0
     alts = [folded[k] for k, _, _ in rest]
-    if s1 >= ACCEPT and s1 - s2 >= 2:
+    accept, correct, margin = (96, 92, 10) if strict else (ACCEPT, CORRECT, MARGIN)
+    if s1 >= accept and s1 - s2 >= 2:
         return Match(given, folded[k1], 'corrected' if s1 < 100 else 'exact', s1, alts)
-    if s1 >= CORRECT and s1 - s2 >= MARGIN:
+    if s1 >= correct and s1 - s2 >= margin:
         return Match(given, folded[k1], 'corrected', s1, alts)
+    if strict and s1 >= CORRECT:
+        return Match(given, None, 'ambiguous', s1, [folded[k1]] + alts)
     if s1 >= CORRECT:
         return Match(given, None, 'ambiguous', s1, [folded[k1]] + alts)
     return Match(given, None, 'not_found', s1, [folded[k1]] + alts)
@@ -68,31 +75,67 @@ def _best(given: str | None, choices: list[str]) -> Match:
 def resolve(loc: dict) -> dict:
     """Extracted location -> {province, district, neighbourhood: Match..., ok, note}.
 
-    When the district is missing, the neighbourhood is searched across the whole province; a unique hit
-    also fills the district.
+    Messages rarely name the province, and often not the district. The search narrows as far as the
+    message allows and widens where it is silent:
+      province given  -> its districts; else every district in the region
+      district found  -> its neighbourhoods; else every neighbourhood in the provinces still possible
+    A neighbourhood that exists in exactly one place fills in the district and province ("inferred").
+    A name that exists in several places is flagged with every option, never guessed.
+    A district-shaped word that is really a neighbourhood ("Karşıyaka'da") is tried as one.
     """
     gz = gazetteer()
-    prov = _best(loc.get('province'), list(gz))
-    out = {'province': prov}
-    if not prov.value:
-        out.update(district=Match(loc.get('district'), None, 'missing'),
-                   neighbourhood=Match(loc.get('neighbourhood'), None, 'missing'))
-        return _summary(out)
-    districts = gz[prov.value]
-    dist = _best(loc.get('district'), list(districts))
-    out['district'] = dist
+    given_p, given_d, given_n = loc.get('province'), loc.get('district'), loc.get('neighbourhood')
+    prov = _best(given_p, list(gz))
+    provs = [prov.value] if prov.value else list(gz)
+
+    dist_choices = {d for p in provs for d in gz[p]}
+    dist = _best(given_d, sorted(dist_choices), strict=not prov.value)
     if dist.value:
-        out['neighbourhood'] = _best(loc.get('neighbourhood'), districts[dist.value])
-    else:
-        everywhere = {f'{m}|{d}': m for d, ms in districts.items() for m in ms}
-        nb = _best(loc.get('neighbourhood'), list({m for m in everywhere.values()}))
-        if nb.value:
-            homes = [k.split('|')[1] for k, m in everywhere.items() if m == nb.value]
-            if len(homes) == 1:
-                out['district'] = Match(loc.get('district'), homes[0], 'inferred', nb.score)
-            else:
-                nb = Match(nb.given, nb.value, 'ambiguous', nb.score, [f'{nb.value} ({h})' for h in homes])
-        out['neighbourhood'] = nb
+        homes = [p for p in provs if dist.value in gz[p]]
+        if not prov.value and len(homes) == 1:
+            prov = Match(given_p, homes[0], 'inferred', dist.score)
+            provs = homes
+        elif len(homes) > 1:
+            provs = homes  # e.g. "Merkez": still open, the neighbourhood decides
+    query = given_n or (given_d if not dist.value else None)
+
+    cands = [(p, d, m) for p in provs for d, ms in gz[p].items()
+             if not dist.value or d == dist.value for m in ms]
+    anchored = bool(prov.value and prov.status != 'inferred') or (dist.value is not None and len(provs) == 1)
+    nb = _best(query, sorted({m for _, _, m in cands}), strict=not anchored)
+    if nb.status != 'exact' and given_d and given_n:
+        # "Merkez Beydağı" split into district "Merkez" + neighbourhood "Beydağı": try them as one name
+        joined = f'{given_d} {given_n}'
+        cands2 = [(p, d, m) for p in (provs if prov.value else list(gz)) for d, ms in gz[p].items() for m in ms]
+        nb2 = _best(joined, sorted({m for _, _, m in cands2}), strict=not prov.value)
+        if nb2.status == 'exact' or (not nb.value and nb.status != 'ambiguous' and (nb2.value or nb2.status == 'ambiguous')):
+            nb, query, cands = nb2, joined, cands2
+            dist = Match(given_d, None, 'not_found', dist.score)
+    raw = fold(loc.get('raw') or '')
+    if raw and (nb.value or nb.status == 'ambiguous'):
+        # the message may hold a longer official name than the model put in the field
+        # ("Merkez Beydağı" vs "Beydağı"): prefer the longest official name written in the raw text
+        longer = sorted({m for _, _, m in cands if len(fold(m)) > len(fold(nb.value or '')) >= 3
+                         and fold(m) in raw and fold(nb.value or query or '') in fold(m)}, key=len)
+        if longer:
+            nb = Match(query, longer[-1], 'exact', 100.0)
+    if nb.value or nb.status == 'ambiguous':
+        names = {fold(nb.value)} if nb.value else {fold(a) for a in nb.alternatives}
+        places = [(p, d, m) for p, d, m in cands if fold(m) in names]
+        if nb.value and len({(p, d) for p, d, _ in places}) == 1:
+            p, d, _ = places[0]
+            if not prov.value:
+                prov = Match(given_p, p, 'inferred', nb.score)
+            if not dist.value or dist.value != d:
+                dist = Match(given_d, d, 'inferred', nb.score)
+        elif places:
+            nb = Match(query, None, 'ambiguous', nb.score,
+                       [f'{m} ({d}, {p})' for p, d, m in places][:8])
+    if given_n is None and query and nb.value:
+        nb.given = None  # the neighbourhood came from the district slot
+    out = {'province': prov, 'district': dist, 'neighbourhood': nb}
+    if not dist.value and dist.status != 'missing' and nb.value:
+        out['district'] = Match(given_d, out['district'].value, 'not_found', dist.score)
     return _summary(out)
 
 
