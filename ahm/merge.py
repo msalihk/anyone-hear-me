@@ -74,6 +74,7 @@ class Cluster:
     buildings: set[str] = field(default_factory=set)
     street_nos: set[tuple[str, str]] = field(default_factory=set)
     reasons: list[str] = field(default_factory=list)
+    tid: str | None = None  # stable task id once shown to a coordinator
 
 
 def _street_no(loc: dict) -> tuple[str, str] | None:
@@ -200,33 +201,34 @@ def unique_place(bk: str, places_by_name: dict) -> bool:
     return bool(sets) and bool(set.intersection(*sets))
 
 
+def is_candidate(a: Cluster, b: Cluster, places_by_name: dict) -> bool:
+    """Could these two groups be the same building, so that the agent should be asked?"""
+    if not compatible(a.places, b.places):
+        return False
+    # building details must not contradict: different names or different street+number -> no
+    if a.buildings and b.buildings and not same_name(a.buildings, b.buildings):
+        return False
+    if a.street_nos and b.street_nos and not (a.street_nos & b.street_nos):
+        return False
+    # and something must tie them: a shared building identity, or a shared named neighbourhood
+    shared_building = bool(same_name(a.buildings, b.buildings)) or bool(a.street_nos & b.street_nos)
+    shared_place = a.places is not None and b.places is not None and \
+        {p[2] for p in a.places} & {p[2] for p in b.places}
+    if not (shared_building or shared_place):
+        return False
+    # a report with no place at all is only tied by street and number; a name alone
+    # ("Güneş Apartmanı") exists in too many towns, so it becomes a possible match instead
+    if (a.places is None or b.places is None) and not (a.street_nos & b.street_nos):
+        shared = same_name(a.buildings, b.buildings)
+        if not shared or not all(unique_place(bk, places_by_name) for bk in shared):
+            return False
+    return True
+
+
 def candidate_pairs(clusters: list[Cluster]) -> list[tuple[int, int]]:
-    pairs = []
     places_by_name = name_places(clusters)
-    for i in range(len(clusters)):
-        for j in range(i + 1, len(clusters)):
-            a, b = clusters[i], clusters[j]
-            if not compatible(a.places, b.places):
-                continue
-            # building details must not contradict: different names or different street+number -> skip
-            if a.buildings and b.buildings and not same_name(a.buildings, b.buildings):
-                continue
-            if a.street_nos and b.street_nos and not (a.street_nos & b.street_nos):
-                continue
-            # and something must tie them: a shared building identity, or a shared named neighbourhood
-            shared_building = bool(same_name(a.buildings, b.buildings)) or bool(a.street_nos & b.street_nos)
-            shared_place = a.places is not None and b.places is not None and \
-                {p[2] for p in a.places} & {p[2] for p in b.places}
-            if not (shared_building or shared_place):
-                continue
-            # a report with no place at all is only tied by street and number; a name alone
-            # ("Güneş Apartmanı") exists in too many towns, so it becomes a possible match instead
-            if (a.places is None or b.places is None) and not (a.street_nos & b.street_nos):
-                shared = same_name(a.buildings, b.buildings)
-                if not shared or not all(unique_place(bk, places_by_name) for bk in shared):
-                    continue  # the name is used by several located groups: show, do not merge
-            pairs.append((i, j))
-    return pairs
+    return [(i, j) for i in range(len(clusters)) for j in range(i + 1, len(clusters))
+            if is_candidate(clusters[i], clusters[j], places_by_name)]
 
 
 def name_only_matches(clusters: list[Cluster]) -> list[dict]:
@@ -357,3 +359,119 @@ def merge(items: list[dict], backend: Backend | None = None, log=print) -> dict:
     order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'closed': 4}
     tasks.sort(key=lambda t: (order[t['urgency']], -(t['reports']), t['first_minute'] or 0))
     return {'tasks': tasks, 'not_requests': others, 'decisions': decisions}
+
+
+# --- incremental desk (live use) -----------------------------------------------------------------------
+
+def single(item: dict) -> Cluster:
+    rec = item['record']
+    c = Cluster([item['id']], places_of(rec))
+    bk = building_key(rec['location'])
+    if bk:
+        c.buildings.add(bk)
+    sn = _street_no(rec['location'])
+    if sn:
+        c.street_nos.add(sn)
+    return c
+
+
+def _join(a: Cluster, b: Cluster, reason: str) -> Cluster:
+    tids = sorted(t for t in (a.tid, b.tid) if t)
+    return Cluster(a.ids + b.ids, _intersect(a.places, b.places), a.buildings | b.buildings,
+                   a.street_nos | b.street_nos, a.reasons + b.reasons + [reason], tids[0] if tids else None)
+
+
+class Desk:
+    """Holds the tasks of one session and takes reports one at a time, as they arrive.
+
+    add() returns what the agent did with the report, in order, for the activity log:
+      {'step': 'not_request' | 'rule' | 'agent' | 'new' | 'possible', ...}
+    """
+
+    def __init__(self, backend: Backend | None = None):
+        self.backend = backend
+        self.items: dict[str, dict] = {}
+        self.clusters: list[Cluster] = []
+        self.decisions: list[dict] = []
+        self.not_requests: list[str] = []
+        self._next = 1
+
+    def add(self, item: dict) -> list[dict]:
+        self.items[item['id']] = item
+        rec = item['record']
+        if not rec['is_help_request'] and rec['status'] != 'resolved':
+            self.not_requests.append(item['id'])
+            return [{'step': 'not_request', 'reason': rec.get('summary_en', '')}]
+        new = single(item)
+        log: list[dict] = []
+        # rules: same resolved neighbourhood and same building identity
+        for i, c in enumerate(self.clusters):
+            exact = new.places is not None and c.places is not None and len(new.places) == 1 \
+                and new.places == c.places and '*' not in next(iter(new.places))
+            if exact and (same_name(new.buildings, c.buildings) or new.street_nos & c.street_nos):
+                self.clusters[i] = _join(c, new, 'same neighbourhood and building')
+                return [{'step': 'rule', 'task': c.tid, 'reason': 'same neighbourhood and building'}]
+        # agent: ask about every compatible group
+        pbn = name_places(self.clusters + [new])
+        cands = [i for i, c in enumerate(self.clusters) if is_candidate(new, c, pbn)]
+        same = []
+        for i in cands:
+            v = judge(new, self.clusters[i], self.items, self.backend)
+            self.decisions.append({'a': new.ids, 'b': list(self.clusters[i].ids), **v})
+            log.append({'step': 'agent', 'task': self.clusters[i].tid, **v})
+            if v['verdict'] == 'same':
+                same.append(i)
+        if same:
+            joined_tids = [self.clusters[k].tid for k in same]
+            target = same[0]
+            merged = _join(self.clusters[target], new, 'agent: same building')
+            for k in same[1:]:  # the new report links two groups: they are one building
+                merged = _join(merged, self.clusters[k], 'agent: linked through a new report')
+            self.clusters = [c for k, c in enumerate(self.clusters) if k not in same] + [merged]
+            if len(same) > 1:
+                log.append({'step': 'linked', 'task': merged.tid, 'tasks': joined_tids})
+            return log
+        new.tid = f'T{self._next:02d}'
+        self._next += 1
+        self.clusters.append(new)
+        log.append({'step': 'new', 'task': new.tid})
+        for m in name_only_matches(self.clusters):
+            if m['a'] == new.ids or m['b'] == new.ids:
+                self.decisions.append(m)
+                log.append({'step': 'possible', 'reason': m['reason']})
+                break
+        return log
+
+    @classmethod
+    def from_tasks(cls, items: dict[str, dict], tasks: list[dict], decisions: list[dict],
+                   not_requests: list[str], backend: Backend | None = None) -> 'Desk':
+        """Rebuild a desk from recorded tasks without calling the model (seed for live sessions)."""
+        d = cls(backend)
+        d.items = dict(items)
+        d.decisions = list(decisions)
+        d.not_requests = list(not_requests)
+        for t in tasks:
+            members = [single(items[m]) for m in t['message_ids']]
+            c = members[0]
+            for o in members[1:]:
+                c = _join(c, o, 'recorded')
+            c.reasons = t.get('merge_reasons', [])
+            c.tid = t['id']
+            d.clusters.append(c)
+        d._next = 1 + max((int(t['id'][1:]) for t in tasks), default=0)
+        return d
+
+    def task_for(self, mid: str) -> dict | None:
+        for c in self.clusters:
+            if mid in c.ids:
+                return build_task(c.tid, c, self.items, self.decisions)
+        return None
+
+    def tasks(self) -> list[dict]:
+        tasks = [build_task(c.tid, c, self.items, self.decisions) for c in self.clusters]
+        order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'closed': 4}
+        tasks.sort(key=lambda t: (order[t['urgency']], -(t['reports']), t['first_minute'] or 0))
+        return tasks
+
+    def task_of(self, mid: str) -> str | None:
+        return next((c.tid for c in self.clusters if mid in c.ids), None)

@@ -50,15 +50,37 @@ echo "META_API_KEY=..." > ~/.config/anyone-hear-me/.env   # never commit keys
 
 ## Try it
 
+The web demo replays a recorded six-hour scenario through the agent and lets you add your own report:
+
+```bash
+uvicorn app.server:app --port 7860      # then open http://localhost:7860
+```
+
+or with Docker (the same image runs on Hugging Face Spaces):
+
+```bash
+docker build -t anyone-hear-me . && docker run -p 7860:7860 -e META_API_KEY=... anyone-hear-me
+```
+
+One voice note from the command line:
+
 ```bash
 python scripts/voice_to_record.py note.m4a --province Kahramanmaraş
 ```
+
+The replay (`data/demo/replay-meta.json`) is the agent's own recorded output for the evaluation scenario,
+made with `scripts/build_replay.py`; nothing in it is written by hand.
 
 ## Data
 
 - `data/gazetteer.json`: districts and neighbourhoods of the 11 provinces affected on 6 Feb 2023, from
   [turkey-neighbourhoods](https://github.com/muratgozel/turkey-neighbourhoods) 4.0.3 (MIT, see
   `data/LICENSE.turkey-neighbourhoods`).
+- `data/coords.json`: neighbourhood and district centres from [OpenStreetMap](https://www.openstreetmap.org/copyright)
+  Nominatim (ODbL), fetched once by `scripts/geocode.py`. Where a neighbourhood is missing, the map shows
+  the district centre with a dashed pin.
+- `app/static/vendor/`: Leaflet 1.9.4 (BSD-2-Clause) and the Barlow, Barlow Condensed and Big Shoulders
+  Stencil Display fonts (SIL Open Font License 1.1), served locally.
 
 ## Related work (what existed, and what this adds)
 

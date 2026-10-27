@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anyone Hear Me</title>
+<meta name="description" content="An agent that turns scattered earthquake help requests into verified rescue tasks for coordinators.">
+<link rel="stylesheet" href="/static/vendor/fonts.css">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="spray" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.5"/>
+  </filter>
+</svg>
+<header class="bar">
+  <div class="brand">
+    <h1>Anyone Hear Me</h1>
+    <p>Help requests from every channel, turned into rescue tasks a coordinator can act on.</p>
+  </div>
+  <div class="controls" role="group" aria-label="Replay">
+    <button id="play" class="btn primary" aria-pressed="false">Play the first six hours</button>
+    <label class="speed">Speed
+      <select id="speed">
+        <option value="1600">1×</option>
+        <option value="700" selected>2×</option>
+        <option value="250">6×</option>
+      </select>
+    </label>
+    <button id="jump" class="btn">Show all</button>
+    <span id="clock" class="clock" aria-live="polite">Hour 0:00, 0 of 0 reports</span>
+    <button id="add" class="btn">Add your own report</button>
+  </div>
+</header>
+
+<main class="desk">
+  <section class="inbox" aria-labelledby="inbox-h">
+    <h2 id="inbox-h">Incoming</h2>
+    <p class="hint">Fictional reports, written the way people posted them in February 2023.</p>
+    <ol id="feed" class="feed"></ol>
+  </section>
+
+  <section class="agent" aria-labelledby="agent-h">
+    <h2 id="agent-h">What the agent did</h2>
+    <div id="trace" class="trace">
+      <div class="empty">
+        <p class="lede">After the 6 February 2023 earthquakes, calls for help came in on every channel at once.
+        The same building was reported dozens of times, addresses were misheard, and volunteers sorted it all by hand.</p>
+        <p>Press play to watch the agent read each report, check the address against the official neighbourhood
+        list, and merge it into the right building. Select any report or task to see why.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="field" aria-labelledby="field-h">
+    <h2 id="field-h" class="visually-hidden">Map and tasks</h2>
+    <div id="map" class="map" role="region" aria-label="Map of tasks"></div>
+    <div class="tasks-head">
+      <h3>Buildings</h3>
+      <span id="taskcount" class="muted"></span>
+    </div>
+    <p class="legend">Marked the way rescue teams mark a building: reports on the left, hours since the first report on the right,
+    people trapped below. One slash means the search is open; a green cross means everyone was reported out.</p>
+    <ol id="tasks" class="tasks"></ol>
+  </section>
+</main>
+
+<dialog id="composer" class="composer" aria-labelledby="composer-h">
+  <form method="dialog" id="composer-form">
+    <h2 id="composer-h">Add a report</h2>
+    <p class="muted">It goes through the same agent, live, on Meta's models. Write it the way someone would
+    post it: Turkish works best, any place in the 11 affected provinces.</p>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true" data-tab="text">Write</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="voice">Voice note</button>
+    </div>
+    <div data-panel="text">
+      <label for="live-text" class="visually-hidden">Report text</label>
+      <textarea id="live-text" rows="4" maxlength="1200" placeholder="Hatay Antakya Haraparası, eczanenin karşısındaki bina çöktü, 3 kişi var sesleri geliyor"></textarea>
+      <div class="examples">
+        <span class="muted">Try:</span>
+        <button type="button" class="chip" data-example="Antakya Meydan mahallesi Yıldız Apartmanı'ndan 2 kişiyi çıkardılar, diğerleri hala içeride">an update</button>
+        <button type="button" class="chip" data-example="Durkadiroğlu Sakarya mahallesi 4. sokak No 29 Defne Konutları yıkıldı, içeriden ses geliyor">a misheard address</button>
+        <button type="button" class="chip" data-example="Defne Yeşilpınar 14. Sokak No 62 Toprak Konutları, 9 kişi var dediler, sesler geliyor">a different count</button>
+      </div>
+    </div>
+    <div data-panel="voice" hidden>
+      <p class="muted">Record up to 45 seconds, or choose a file. Kahramanmaraş place names are used to help recognition.</p>
+      <div class="voice-row">
+        <button type="button" id="rec" class="btn">Start recording</button>
+        <label class="btn file">Choose audio file<input type="file" id="audio-file" accept="audio/*" hidden></label>
+        <span id="rec-status" class="muted" aria-live="polite"></span>
+      </div>
+    </div>
+    <p id="live-error" class="error" role="alert" hidden></p>
+    <div class="actions">
+      <button value="cancel" class="btn">Close</button>
+      <button type="button" id="send" class="btn primary">Send to the agent</button>
+    </div>
+  </form>
+</dialog>
+
+<footer class="foot">
+  <p>Built during the Meta Global AI Developer Hackathon with Muse Voice Transcribe, Muse Spark, SAM 3.1, Muse Image and Muse Spark Open.
+  All reports and photos are fictional; places are real neighbourhoods. Map data © OpenStreetMap contributors.
+  <a href="https://github.com/msalihk/anyone-hear-me">Source code</a></p>
+</footer>
+
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

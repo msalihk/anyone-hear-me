@@ -1,0 +1,170 @@
+{
+ "source": "OpenStreetMap Nominatim, ODbL",
+ "places": {
+  "Adıyaman|Merkez": {
+   "lat": 37.78936,
+   "lon": 38.3141101,
+   "osm": "Adıyaman, Güneydoğu Anadolu Bölgesi, Türkiye"
+  },
+  "Adıyaman|Merkez|Akçik": null,
+  "Adıyaman|Merkez|Ekinci Köyü": {
+   "lat": 37.58699,
+   "lon": 38.152355,
+   "osm": "Ekinci, Adıyaman Merkez, Adıyaman, Güneydoğu Anadolu Bölgesi, Türkiye"
+  },
+  "Adıyaman|Merkez|Mahmutlu": null,
+  "Adıyaman|Merkez|Uzunköy Köyü": {
+   "lat": 37.9094646,
+   "lon": 38.1192599,
+   "osm": "Uzunköy, Adıyaman Merkez, Adıyaman, Güneydoğu Anadolu Bölgesi, Türkiye"
+  },
+  "Hatay|Antakya": {
+   "lat": 36.2025574,
+   "lon": 36.1640991,
+   "osm": "Antakya (antik kent), Yenicamii Sokak, Yenicami Mahallesi, Hatay, Antakya, Hatay, Akdeniz Bölgesi, 31040, Türkiye"
+  },
+  "Hatay|Antakya|Doğanköy": null,
+  "Hatay|Antakya|Haraparası": {
+   "lat": 36.207409,
+   "lon": 36.1637531,
+   "osm": "Haraparası Mahallesi, Hatay, Antakya, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Antakya|Meydan": {
+   "lat": 36.2042725,
+   "lon": 36.1640356,
+   "osm": "Meydan Mahallesi, Hatay, Antakya, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Antakya|Orhanlı": {
+   "lat": 36.2046223,
+   "lon": 36.1694653,
+   "osm": "Orhanlı Mahallesi, Hatay, Antakya, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Antakya|Suvatlı": {
+   "lat": 36.295094,
+   "lon": 36.296051,
+   "osm": "Suvatlı, Antakya, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Defne": {
+   "lat": 36.1951853,
+   "lon": 36.1476639,
+   "osm": "Defne, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Defne|Armutlu": {
+   "lat": 36.1953228,
+   "lon": 36.1514317,
+   "osm": "Armutlu Mahallesi, Defne, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Defne|Hancağız": {
+   "lat": 36.1496235,
+   "lon": 36.0858688,
+   "osm": "Hancağız Mahallesi, Defne, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Defne|Karşıyaka": {
+   "lat": 36.074286,
+   "lon": 36.0516553,
+   "osm": "Karşıyaka Mahallesi, Defne, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|Defne|Subaşı": {
+   "lat": 36.1818599,
+   "lon": 36.1290493,
+   "osm": "Subaşı Mahallesi, Defne, Hatay, Akdeniz Bölgesi, 31158, Türkiye"
+  },
+  "Hatay|Defne|Yeşilpınar": {
+   "lat": 36.1361914,
+   "lon": 36.1212886,
+   "osm": "Yeşilpınar, Defne, Hatay, Akdeniz Bölgesi, 31080, Türkiye"
+  },
+  "Hatay|İskenderun": {
+   "lat": 36.5902266,
+   "lon": 36.1710354,
+   "osm": "İskenderun, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|İskenderun|Bitişik": {
+   "lat": 36.6294369,
+   "lon": 36.2415677,
+   "osm": "Bitişik, İskenderun, Hatay, Akdeniz Bölgesi, Türkiye"
+  },
+  "Hatay|İskenderun|Mustafa Kemal": {
+   "lat": 36.5637391,
+   "lon": 36.1495492,
+   "osm": "Mustafa Kemal Mahallesi, İskenderun, Hatay, Akdeniz Bölgesi, 31230, Türkiye"
+  },
+  "Kahramanmaraş|Dulkadiroğlu": {
+   "lat": 37.5812744,
+   "lon": 36.927509,
+   "osm": "Kahramanmaraş, Dulkadiroğlu, Kahramanmaraş, Akdeniz Bölgesi, 36002, Türkiye"
+  },
+  "Kahramanmaraş|Dulkadiroğlu|Sakarya": null,
+  "Kahramanmaraş|Dulkadiroğlu|Sümer": null,
+  "Kahramanmaraş|Dulkadiroğlu|Şeyh Adil": {
+   "lat": 37.5791054,
+   "lon": 36.9389309,
+   "osm": "Şeyh Adil Mahallesi, Kahramanmaraş, Dulkadiroğlu, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Dulkadiroğlu|Şeyh Şamil": {
+   "lat": 37.5794571,
+   "lon": 36.9550142,
+   "osm": "Şeyh Şamil Mahallesi, Dulkadiroğlu, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Onikişubat": {
+   "lat": 37.5777575,
+   "lon": 36.923735,
+   "osm": "Onikişubat, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Onikişubat|Hayrullah": {
+   "lat": 37.5799569,
+   "lon": 36.9257705,
+   "osm": "Hayrullah Mahallesi, Onikişubat, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Onikişubat|Küçüksır": {
+   "lat": 37.490264,
+   "lon": 36.6015362,
+   "osm": "Küçüksır, Onikişubat, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Onikişubat|Rahmacılar": {
+   "lat": 37.5463662,
+   "lon": 36.59753,
+   "osm": "Rahmacılar, Onikişubat, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Onikişubat|Çağlayan": {
+   "lat": 37.8135763,
+   "lon": 36.6613436,
+   "osm": "Çağlayan, Onikişubat, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Onikişubat|Üngüt": {
+   "lat": 37.596775,
+   "lon": 36.834629,
+   "osm": "Üngüt Mahallesi, Onikişubat, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Kahramanmaraş|Onikişubat|Şahinkayası": {
+   "lat": 37.8421134,
+   "lon": 36.6857355,
+   "osm": "Şahinkayası, Onikişubat, Kahramanmaraş, Akdeniz Bölgesi, Türkiye"
+  },
+  "Malatya|Battalgazi": {
+   "lat": 38.3486769,
+   "lon": 38.3191313,
+   "osm": "Malatya, Battalgazi, Malatya, Doğu Anadolu Bölgesi, 44000, Türkiye"
+  },
+  "Malatya|Battalgazi|Merkez Beydağı": {
+   "lat": 38.3319616,
+   "lon": 38.3145618,
+   "osm": "Merkez Beydağı Mahallesi, Malatya, Battalgazi, Malatya, Doğu Anadolu Bölgesi, Türkiye"
+  },
+  "Malatya|Battalgazi|Saray": {
+   "lat": 38.3482204,
+   "lon": 38.3209061,
+   "osm": "Saray Mahallesi, Malatya, Battalgazi, Malatya, Doğu Anadolu Bölgesi, Türkiye"
+  },
+  "Malatya|Yeşilyurt": {
+   "lat": 38.3525196,
+   "lon": 38.2832453,
+   "osm": "Malatya, Yeni Hastane Caddesi, İnönü Mahallesi, Yeşilyurt, Malatya, Doğu Anadolu Bölgesi, 44080, Türkiye"
+  },
+  "Malatya|Yeşilyurt|Bentbaşı": {
+   "lat": 38.3573722,
+   "lon": 38.3067941,
+   "osm": "Bentbaşı Mahallesi, Yeşilyurt, Malatya, Doğu Anadolu Bölgesi, Türkiye"
+  }
+ }
+}
