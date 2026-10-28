@@ -233,7 +233,7 @@ function stepTrace(s) {
     <h3>${s.channel === 'phone call' ? 'Took a phone call' : s.transcript ? 'Transcribed the voice note' : `Read a report sent on ${esc(channel(s.channel))}`} at hour ${hhmm(s.minute)}</h3>
     <p class="quote" lang="${langOf(s.text)}" dir="auto">${highlight(s.text, quotes)}</p>
     <p class="muted">${s.transcript ? 'Muse Voice Transcribe, live, biased toward local place names. ' : ''}${isArabic(s.text) ? 'Written in Arabic; the agent reads it directly and writes names in their official Turkish spelling. ' : ''}Highlighted words are the
-    quotes the agent used as evidence${s.seconds ? `; ${s.seconds} seconds end to end` : ''}.</p>${photoHtml(s.media)}</div></div>`);
+    quotes the agent used as evidence${s.seconds ? `; ${s.seconds} seconds end to end` : ''}.</p>${quoteCheck(s.text, quotes)}${photoHtml(s.media)}</div></div>`);
 
   // 2. understood
   if (!r.is_help_request) {
@@ -279,6 +279,18 @@ function stepTrace(s) {
   else if (s.questions?.length && s.task) parts.push(`<div class="step"><span class="n">${n()}</span><div>
     <h3>Drafted questions to settle what is unclear</h3>${questionsHtml(s.task.id, s.questions)}</div></div>`);
   return parts.join('');
+}
+
+// every evidence quote is checked against the message itself: a model can paraphrase, the record must not
+function quoteCheck(text, quotes) {
+  const norm = (x) => String(x || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
+  const t = norm(text);
+  const qs = [...new Set((quotes || []).filter(Boolean))];
+  if (!qs.length) return '';
+  const missing = qs.filter((q) => !t.includes(norm(q)));
+  return missing.length
+    ? `<p class="conflict">${qs.length - missing.length} of ${qs.length} quotes found word for word in the message. Not found: ${missing.map((q) => `“${esc(q)}”`).join(', ')}</p>`
+    : `<p class="settled">Checked: all ${qs.length} quotes appear word for word in the message.</p>`;
 }
 
 function photoHtml(id) {
@@ -345,6 +357,7 @@ function answerTrace(s) {
     ${asked ? `<p class="muted">Their report: <span lang="tr">${esc(asked.text)}</span></p>` : ''}</div></div>`);
   parts.push(`<div class="step"><span class="n">${n()}</span><div><h3>Read the answer at hour ${hhmm(s.minute)}</h3>
     <p class="quote" lang="${langOf(s.text)}" dir="auto">${highlight(s.text, (r.evidence || []).map((e) => e.quote))}</p>
+    ${quoteCheck(s.text, (r.evidence || []).map((e) => e.quote))}
     ${s.simulated ? '<p class="muted">Simulated reporter: in the replay, Muse Spark plays the reporter and answers from the facts of the fictional incident.</p>' : ''}</div></div>`);
   const settles = [...(s.settles || [])];
   if (s.answered && !settles.length && r.signs_of_life && r.signs_of_life !== 'unknown') settles.push('signs_of_life');

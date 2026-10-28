@@ -102,6 +102,10 @@ requests), with the agent's own recorded runs. These are numbers on invented dat
 | Address wrong | 1/89 (1%) | 4/89 (4%) |
 | People count as stated | 36/37 (97%) | 34/37 (92%) |
 | "Some rescued, others still inside" read correctly | 6/6 | 1/6 |
+| Evidence quotes found word for word in the message | 1,514/1,515 | 895/917 |
+
+Every evidence quote is checked against the message it came from (`python scripts/check_quotes.py`), and the
+demo shows the check under each report: a model can paraphrase, the record must not.
 
 **Asking back** (`python scripts/eval_followups.py`): the same reports on the same desk, without and with
 the follow-up loop (Muse Spark; answers from the simulated reporter):
