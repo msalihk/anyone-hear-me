@@ -451,6 +451,22 @@ function stillOpen(t) {
 
 const NO_PERSONAL = /phone|telefon|contact number|name of|isim/i;
 
+// possible_duplicates holds groups of report ids; show the other task each report is in now, or the report.
+function maybeSameHtml(t) {
+  const ids = [...new Set((t.possible_duplicates || []).flat().map((d) => (typeof d === 'string' ? d : d?.task)).filter(Boolean))];
+  const own = new Set(t.message_ids || []);
+  const others = [];
+  for (const id of ids) {
+    if (own.has(id)) continue;
+    const other = [...state.tasks.values()].find((x) => x.id !== t.id && (x.message_ids || []).includes(id));
+    const label = other ? `${esc(other.id)}: ${esc(taskTitle(other))}` : `report ${esc(id)}`;
+    const key = other ? other.id : id;
+    if (!others.some((o) => o.key === key)) others.push({ key, html: other ? `<b>${label}</b>` : `<button class="linkish" data-open-step="${esc(id)}">${label}</button>` });
+  }
+  if (!others.length) return '';
+  return `<p>May be the same building as ${others.map((o) => o.html).join(', ')}; not merged until someone confirms.</p>`;
+}
+
 function taskTrace(t) {
   const reports = t.message_ids.map((id) => state.byId.get(id)).filter(Boolean);
   const ev = new Map();
@@ -471,7 +487,7 @@ function taskTrace(t) {
       ${(t.building || {}).landmark ? `<dt>Landmark</dt><dd lang="tr">${esc(t.building.landmark)}</dd>` : ''}
     </dl>
     ${conflictsHtml(t)}
-    ${(t.possible_duplicates || []).length ? `<p>May be the same building as ${t.possible_duplicates.map((d) => `<b>${esc(d.task || d)}</b>`).join(', ')}; not merged until someone confirms.</p>` : ''}
+    ${maybeSameHtml(t)}
     ${qs.length ? `<p><b>Questions waiting for approval</b></p>${questionsHtml(t.id, qs)}` : ''}
     ${(t.followups || []).length ? `<p><b>Asked the reporters</b></p>${t.followups.map((f) => {
       const a = f.answer && state.byId.get(f.answer);
