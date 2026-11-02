@@ -307,6 +307,7 @@ async def live_voice(request: Request, response: Response, audio: UploadFile = F
 # --- live call: speech streams in, the agent fills the record and says what to ask next ------------------
 
 MAX_CALL_SECONDS = 90
+END_GRACE_SECONDS = 8   # after hang-up, how long to wait for the last words from the speech service
 
 
 def next_questions(rec: dict) -> list[str]:
@@ -379,6 +380,9 @@ async def call(ws: WebSocket, province: str = 'Kahramanmaraş') -> None:
                 raise RuntimeError('The speech service did not accept the call.')
             await ws.send_json({'type': 'ready'})
 
+            ended = asyncio.Event()
+            ended_at = [0.0]
+
             async def from_browser() -> None:
                 t0, sent = time.time(), 0
                 try:
@@ -394,10 +398,25 @@ async def call(ws: WebSocket, province: str = 'Kahramanmaraş') -> None:
                         elif msg.get('type') == 'websocket.disconnect':
                             break
                 finally:
-                    await up.send(json.dumps({'type': 'endStream'}))
+                    ended_at[0] = time.time()
+                    ended.set()
+                    try:
+                        await up.send(json.dumps({'type': 'endStream'}))
+                    except websockets.ConnectionClosed:
+                        pass
 
             sender = asyncio.create_task(from_browser())
-            async for raw in up:
+            while True:
+                # after the caller hangs up, wait a few seconds for the last words, then stop: with no speech at
+                # all the speech service may never close the stream
+                try:
+                    raw = await asyncio.wait_for(up.recv(), timeout=1)
+                except asyncio.TimeoutError:
+                    if ended.is_set() and time.time() - ended_at[0] > END_GRACE_SECONDS:
+                        break
+                    continue
+                except websockets.ConnectionClosed:
+                    break
                 if isinstance(raw, bytes):
                     continue
                 m = json.loads(raw)
@@ -418,7 +437,9 @@ async def call(ws: WebSocket, province: str = 'Kahramanmaraş') -> None:
                             analysing = asyncio.create_task(analyse())
                 elif m.get('type') == 'error':
                     raise RuntimeError('The speech service stopped the call.')
-            await sender
+            if not sender.done():   # the speech service closed first: stop reading the browser
+                sender.cancel()
+            await asyncio.gather(sender, return_exceptions=True)
         if partial.strip():
             segments.append(partial.strip())
         text = ' '.join(segments).strip()

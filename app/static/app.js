@@ -803,7 +803,12 @@ async function takeCall() {
       if ($('#call-status')) $('#call-status').textContent = m.detail;
     }
   };
-  call.ws.onclose = () => { if (call.ws) cleanupCall(); };
+  call.ws.onclose = () => {
+    if (!call.ws) return;
+    cleanupCall();
+    const st = $('#call-status');
+    if (st && /Call ended|Connecting/.test(st.textContent)) st.textContent = 'The call ended without a result. Take the call again.';
+  };
 }
 
 function hangUp() {
@@ -812,6 +817,17 @@ function hangUp() {
   if ($('#hangup')) $('#hangup').disabled = true;
   stopAudio();
   if (call.ws.readyState === 1) call.ws.send(JSON.stringify({ type: 'end' }));
+  else {   // hung up before the line was open: nothing to wait for
+    cleanupCall();
+    if ($('#call-status')) $('#call-status').textContent = 'Call cancelled. Take the call again when you are ready.';
+    return;
+  }
+  // never leave the call panel waiting forever
+  call.endTimer = setTimeout(() => {
+    if (!call.ws) return;
+    cleanupCall();
+    if ($('#call-status')) $('#call-status').textContent = 'The call ended without a result. Take the call again.';
+  }, 30000);
 }
 
 function stopAudio() {
@@ -821,6 +837,7 @@ function stopAudio() {
 }
 
 function cleanupCall() {
+  clearTimeout(call.endTimer);
   stopAudio();
   const ws = call.ws; call.ws = null;
   try { ws?.close(); } catch { /* already closed */ }
