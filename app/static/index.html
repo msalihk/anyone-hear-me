@@ -21,25 +21,29 @@
     <h1>Anyone Hear Me</h1>
     <p>Help requests from every channel, turned into rescue tasks a coordinator can act on.</p>
   </div>
-  <div class="controls" role="group" aria-label="Replay">
-    <label class="speed">Model
-      <select id="model">
-        <option value="meta" selected>Muse Spark (Meta Model API)</option>
-        <option value="open">Muse Spark Open (open weights)</option>
-      </select>
-    </label>
-    <button id="play" class="btn primary" aria-pressed="false">Play the first hours</button>
-    <label class="speed">Speed
-      <select id="speed">
-        <option value="1600">1×</option>
-        <option value="700" selected>2×</option>
-        <option value="250">6×</option>
-      </select>
-    </label>
-    <button id="jump" class="btn">Show all</button>
-    <span id="clock" class="clock" aria-live="polite">Hour 0:00, 0 of 0 reports</span>
-    <button id="call" class="btn">Take a live call</button>
-    <button id="add" class="btn">Add your own report</button>
+  <div class="controls">
+    <div class="group" role="group" aria-label="Replay of the first hours">
+      <label class="speed">Model
+        <select id="model">
+          <option value="meta" selected>Muse Spark (Meta Model API)</option>
+          <option value="open">Muse Spark Open (open weights)</option>
+        </select>
+      </label>
+      <button id="play" class="btn primary" aria-pressed="false">Play the first hours</button>
+      <label class="speed">Speed
+        <select id="speed">
+          <option value="1600">1×</option>
+          <option value="700" selected>2×</option>
+          <option value="250">6×</option>
+        </select>
+      </label>
+      <button id="jump" class="btn">Show all</button>
+      <span id="clock" class="clock" aria-live="polite">Hour 0:00, 0 of 0 reports</span>
+    </div>
+    <div class="group live" role="group" aria-label="Try it live">
+      <button id="call" class="btn">Take a live call</button>
+      <button id="add" class="btn">Add your own report</button>
+    </div>
   </div>
 </header>
 
@@ -59,6 +63,11 @@
         <p>Press play to watch the agent read each report, check the address against the official neighbourhood
         list and merge it into the right building. When something does not add up, it asks the person who
         reported it, reads the answer and updates the task. Select any report or task to see why.</p>
+        <ul class="ways">
+          <li><button type="button" class="way" data-act="play"><b>Watch the first hours</b><span>The recorded messages of the first hours, replayed in order as they arrived.</span></button></li>
+          <li><button type="button" class="way" data-act="call"><b>Take a live call</b><span>Speak as a caller. The agent fills in the record and tells you what to ask next.</span></button></li>
+          <li><button type="button" class="way" data-act="add"><b>Add your own report</b><span>Write or record a report the way people posted them, and watch it join a building.</span></button></li>
+        </ul>
       </div>
     </div>
   </section>

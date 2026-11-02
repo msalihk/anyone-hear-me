@@ -85,6 +85,9 @@ function initMap() {
     maxZoom: 17, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
   layer = L.layerGroup().addTo(map);
+  // zoomed out, team labels would cover the buildings: show them as dots until the map is closer
+  const dense = () => $('#map').classList.toggle('far', map.getZoom() < 10);
+  map.on('zoomend', dense); dense();
 }
 
 function where(task) {
@@ -549,7 +552,7 @@ function updateClock() {
   const play = $('#play');
   play.textContent = state.timer ? 'Pause' : done ? 'Play again' : state.shown ? 'Resume' : 'Play the first hours';
   play.setAttribute('aria-pressed', String(!!state.timer));
-  $('#jump').hidden = done;
+  $('#jump').disabled = done;   // keep its place so the bar does not shift
 }
 
 function tick() {
@@ -768,6 +771,7 @@ async function takeCall() {
     call.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
   } catch {
     $('#call-status').textContent = 'The microphone is not available. Allow it in the browser, or add a voice note instead.';
+    if ($('#hangup')) $('#hangup').hidden = true;
     return;
   }
   call.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/call`);
@@ -953,6 +957,7 @@ function wire() {
     const r = e.target.closest('[data-reply]'); if (r) return sendReply(r);
     const g = e.target.closest('[data-assign]'); if (g) return approveAssign(g);
     const cap = e.target.closest('[data-cap]'); if (cap) return downloadCap(cap.dataset.cap);
+    const w = e.target.closest('[data-act]'); if (w) return $('#' + w.dataset.act).click();
   });
   $('#trace').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.matches('.reply-row input')) { e.preventDefault(); sendReply(e.target.nextElementSibling); }
