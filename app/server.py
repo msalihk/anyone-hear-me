@@ -22,7 +22,7 @@ import asyncio
 
 import websockets
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -143,9 +143,22 @@ def spend(s: dict) -> None:
 
 # --- pages and recorded data ----------------------------------------------------------------------------
 
+def _page() -> str:
+    # stamp the page's own files with their content hash, so a new deploy is never hidden by the browser cache
+    import hashlib
+    html = (STATIC / 'index.html').read_text(encoding='utf-8')
+    for name in ('style.css', 'app.js'):
+        v = hashlib.sha1((STATIC / name).read_bytes()).hexdigest()[:10]
+        html = html.replace(f'/static/{name}"', f'/static/{name}?v={v}"')
+    return html
+
+
+_PAGE = _page()
+
+
 @app.get('/')
-def index() -> FileResponse:
-    return FileResponse(STATIC / 'index.html')
+def index() -> HTMLResponse:
+    return HTMLResponse(_PAGE, headers={'Cache-Control': 'no-cache'})
 
 
 @app.get('/api/replay')
