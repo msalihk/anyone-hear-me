@@ -831,7 +831,7 @@ function hangUp() {
     if (!call.ws) return;
     cleanupCall();
     if ($('#call-status')) $('#call-status').textContent = 'The call ended without a result. Take the call again.';
-  }, 30000);
+  }, 90000);   // reading a whole call can take a while when the model is busy
 }
 
 function stopAudio() {
